@@ -13,7 +13,12 @@ timestamps) without polluting the mission schema.
 
 from __future__ import annotations
 
-from schemas.mission import SuccessCriterion
+# This module is loaded as part of the ``swarm.schemas`` namespace package
+# (which combines the repo's outer ``schemas/`` and the inner
+# ``swarm/schemas/`` directories). Reaching for the ``SuccessCriterion`` via
+# the fully-qualified ``swarm.schemas.mission`` path works regardless of
+# which namespace contributor ``schemas/mission.py`` lives in.
+from swarm.schemas.mission import SuccessCriterion
 
 # Public single-purpose name. Keep the alias tight: downstream code imports
 # ``Criterion`` exclusively from this module, regardless of how the type is
