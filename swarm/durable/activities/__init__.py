@@ -25,6 +25,21 @@ from swarm.durable.activities.verify_tamper import (
     verify_tamper,
 )
 
+# Dataclasses from the new judge activities are re-exported unaliased so
+# callers can ``from swarm.durable.activities import InterventionDecision``.
+# The activity FUNCTIONS, however, use the ``_activity`` suffix so they do
+# not shadow their submodules at attribute lookup time. Same pitfall as
+# ``emit_finding`` — see the comment on that re-export below.
+from swarm.durable.activities.intervention_judge import (
+    ESCAPE_LADDER,
+    InterventionDecision,
+    intervention_judge as intervention_judge_activity,
+)
+from swarm.durable.activities.completion_judge import (
+    CompletionDecision,
+    completion_judge as completion_judge_activity,
+)
+
 # ``emit_finding`` is re-exported under an alias so it does not shadow the
 # ``swarm.durable.activities.emit_finding`` submodule at attribute lookup
 # time. Task 6 hit this exact pitfall with ``enforce_invariants`` — once a
@@ -39,11 +54,16 @@ from swarm.durable.activities.emit_finding import (
 )
 
 __all__ = [
+    "CompletionDecision",
     "CriterionCheckResult",
+    "ESCAPE_LADDER",
+    "InterventionDecision",
     "InvariantsResult",
     "TamperResult",
     "check_criterion",
+    "completion_judge_activity",
     "emit_finding_activity",
     "enforce_invariants",
+    "intervention_judge_activity",
     "verify_tamper",
 ]
