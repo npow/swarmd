@@ -39,3 +39,5 @@ exclude = ["tests*", "lib*", "hooks*", "specialists*", "schemas*", "scripts*", "
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+pythonpath = [".."]
+addopts = "--import-mode=importlib"

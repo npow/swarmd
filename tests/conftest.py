@@ -8,9 +8,21 @@ from pathlib import Path
 
 import pytest
 
-# Make `swarm` importable
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT))
+# Make `swarm` importable as a namespace package rooted at the repo dir.
+# pytest adds rootdir (/Users/npow/code/research/swarm) to sys.path, which
+# causes `import swarm` to find swarm/swarm/ (the Temporal sub-package)
+# instead of the outer namespace at /Users/npow/code/research/swarm/.
+# Fix: ensure /Users/npow/code/research is first and evict any stale cache.
+_SWARM_DIR = str(Path(__file__).resolve().parents[1])   # .../swarm
+REPO_ROOT = Path(__file__).resolve().parents[2]          # .../research
+sys.path = [p for p in sys.path if p != _SWARM_DIR]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+# Evict any swarm modules already cached from the wrong path so re-imports
+# pick up the namespace package at REPO_ROOT/swarm/.
+for _key in list(sys.modules):
+    if _key == "swarm" or _key.startswith("swarm."):
+        del sys.modules[_key]
 
 
 @pytest.fixture

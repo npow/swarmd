@@ -106,7 +106,9 @@ def main(argv: list[str]) -> int:
     sid: str | None = None
     if argv and argv[0] == "--auto":
         sid = SessionSnapshot.find_most_recent()
-    elif argv:
+    elif len(argv) >= 2 and argv[0] == "--session":
+        sid = argv[1]
+    elif argv and argv[0] != "--session":
         sid = argv[0]
 
     if sid is None:

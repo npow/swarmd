@@ -234,3 +234,59 @@ def test_wrapper_json_mode_valid_when_beat_has_no_timestamp(tmp_swarm_root, sess
     health_entries = data["health"]
     assert len(health_entries) == 1
     assert health_entries[0]["last_beat_age_sec"] is None
+
+
+def test_statusline_accepts_session_arg(tmp_swarm_root, session_id, tmp_path):
+    """--session <sid> and bare positional <sid> both produce non-empty output.
+
+    Regression for Bug #3: main(["--session", sid]) was treating "--session"
+    as the session_id, causing SessionSnapshot.load() to raise ValueError and
+    silently print an empty line.
+    """
+    import io
+    import unittest.mock as mock
+    import yaml
+
+    from swarm.lib.paths import (
+        _reset_for_tests,
+        ensure_session_dirs,
+        events_path,
+        mission_yaml_path,
+        session_dir,
+    )
+    from swarm.statusline import main
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    ensure_session_dirs(session_id)
+    mission_yaml_path(session_id).parent.mkdir(parents=True, exist_ok=True)
+    mission_yaml_path(session_id).write_text(
+        yaml.safe_dump({
+            "mission": "Test mission",
+            "workspace": str(ws),
+            "success_criteria": [{"id": "ok", "description": "", "check": "true"}],
+        })
+    )
+    events_path(session_id).write_text('{"x":1}\n')
+    (session_dir(session_id) / "verifier_status.json").write_text(
+        '{"ts":1.0,"all_pass":false,"per_criterion":{"ok":{"status":"pass","exit_code":0}}}'
+    )
+
+    with mock.patch.dict(os.environ, {"SWARM_ROOT": str(tmp_swarm_root)}):
+        _reset_for_tests()
+
+        # Positional form: main([sid]) — should already work
+        captured = io.StringIO()
+        with mock.patch("sys.stdout", captured):
+            main([session_id])
+        out_positional = captured.getvalue().strip()
+        assert out_positional != "", f"positional form returned empty for sid={session_id}"
+        assert session_id[:8] in out_positional, f"sid prefix not in output: {out_positional!r}"
+
+        # --session form: main(["--session", sid]) — this was broken
+        captured2 = io.StringIO()
+        with mock.patch("sys.stdout", captured2):
+            main(["--session", session_id])
+        out_session = captured2.getvalue().strip()
+        assert out_session != "", f"--session form returned empty for sid={session_id}"
+        assert session_id[:8] in out_session, f"sid prefix not in --session output: {out_session!r}"

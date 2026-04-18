@@ -380,3 +380,51 @@ def test_find_most_recent_ignores_sessions_with_no_events_jsonl(tmp_swarm_root):
 
     _ep("aaaaaaaaaaaa").unlink(missing_ok=True)
     assert SessionSnapshot.find_most_recent() == "bbbbbbbbbbbb"
+
+
+def test_snapshot_load_agrees_with_verifier_status_when_all_pass(tmp_swarm_root, session_id):
+    """SessionSnapshot.load() must use verifier_status.json as authoritative
+    source for criteria counts when all criteria pass.
+
+    Regression for Bug #2: statusline showed 2/4 while verifier_status.json
+    had all 4 criteria passing. This test seeds a session with 4-criterion
+    all_pass verifier state and asserts the snapshot reflects it correctly.
+    """
+    from pathlib import Path
+    import shutil
+    from swarm.lib.paths import session_dir
+
+    evidence_dir = Path(
+        "/Users/npow/.swarm/state/324da372-5986-4724-9a3d-af6b06d175f8"
+    )
+    sdir = session_dir(session_id)
+    for fname in ("events.jsonl", "findings.jsonl", "interventions.jsonl"):
+        src = evidence_dir / fname
+        if src.exists():
+            shutil.copy(src, sdir / fname)
+
+    # Write a verifier_status.json that says all 4 criteria pass — the
+    # scenario the bug report describes: verifier says all_pass but statusline
+    # showed a lower count.
+    all_pass_verifier = {
+        "ts": 1776549200.0,
+        "all_pass": True,
+        "all_pass_since": 1776549100.0,
+        "per_criterion": {
+            "pytest_passes":    {"status": "pass", "exit_code": 0},
+            "behavior_correct": {"status": "pass", "exit_code": 0},
+            "test_count_floor": {"status": "pass", "exit_code": 0},
+            "no_stubs":         {"status": "pass", "exit_code": 0},
+        },
+    }
+    (sdir / "verifier_status.json").write_text(json.dumps(all_pass_verifier))
+
+    snap = SessionSnapshot.load(session_id)
+
+    assert len(snap.criteria) == 4, (
+        f"expected 4 criteria, got {len(snap.criteria)}: "
+        f"{[c.id for c in snap.criteria]}"
+    )
+    failing = [c for c in snap.criteria if c.status != "pass"]
+    assert failing == [], f"expected all pass, but these failed: {failing}"
+    assert snap.all_pass is True
