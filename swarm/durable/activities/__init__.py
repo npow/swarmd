@@ -16,8 +16,14 @@ from swarm.durable.activities.check_criterion import (
     CriterionCheckResult,
     check_criterion,
 )
+from swarm.durable.activities.verify_tamper import (
+    TamperResult,
+    verify_tamper,
+)
 
 __all__ = [
     "CriterionCheckResult",
+    "TamperResult",
     "check_criterion",
+    "verify_tamper",
 ]
