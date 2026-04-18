@@ -52,8 +52,13 @@ from swarm.durable.activities.completion_judge import (
 from swarm.durable.activities.emit_finding import (
     emit_finding as emit_finding_activity,
 )
+from swarm.durable.activities.run_claude_cli import (
+    ClaudeResult,
+    run_claude_cli as run_claude_cli_activity,
+)
 
 __all__ = [
+    "ClaudeResult",
     "CompletionDecision",
     "CriterionCheckResult",
     "ESCAPE_LADDER",
@@ -65,5 +70,6 @@ __all__ = [
     "emit_finding_activity",
     "enforce_invariants",
     "intervention_judge_activity",
+    "run_claude_cli_activity",
     "verify_tamper",
 ]
