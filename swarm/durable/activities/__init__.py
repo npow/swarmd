@@ -16,6 +16,10 @@ from swarm.durable.activities.check_criterion import (
     CriterionCheckResult,
     check_criterion,
 )
+from swarm.durable.activities.enforce_invariants import (
+    InvariantsResult,
+    enforce_invariants,
+)
 from swarm.durable.activities.verify_tamper import (
     TamperResult,
     verify_tamper,
@@ -23,7 +27,9 @@ from swarm.durable.activities.verify_tamper import (
 
 __all__ = [
     "CriterionCheckResult",
+    "InvariantsResult",
     "TamperResult",
     "check_criterion",
+    "enforce_invariants",
     "verify_tamper",
 ]
