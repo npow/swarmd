@@ -55,7 +55,7 @@ LLMRunner = Callable[[str], str]
 def default_llm_runner(prompt: str) -> str:
     try:
         proc = subprocess.run(
-            ["claude", "-p", "--bare", "--model", "opus"],
+            ["claude", "-p", "--model", "opus"],
             input=prompt,
             capture_output=True,
             text=True,
