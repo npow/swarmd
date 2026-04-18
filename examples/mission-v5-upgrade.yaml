@@ -1,0 +1,106 @@
+mission: |
+  Upgrade swarm v4 → v5. Operator-facing improvements + stronger
+  correctness guarantees:
+  1. Static type checking (mypy) catches a class of bugs tests miss.
+     Enforce as a gate.
+  2. swarm-cli admin tool for operators: `list-sessions`, `inspect <id>`,
+     `tree <id>`, `kill <id>`, `revise-mission <id>`, `promote <version>`.
+  3. Property-based tests (hypothesis) for the locking + event-scribe
+     invariants — fuzz the parts that are correctness-critical.
+
+workspace: "/Users/npow/code/research"
+
+success_criteria:
+  - id: tests_pass
+    description: "All tests pass"
+    check: "PYTHONPATH=. python3 -m pytest swarm/tests/ -q"
+    timeout_sec: 180
+    idempotent: true
+
+  - id: ruff_clean
+    description: "Ruff clean"
+    check: "ruff check swarm/ --select E,F,W,I --ignore E501"
+    timeout_sec: 30
+    idempotent: true
+
+  - id: mypy_clean
+    description: "Mypy catches no errors in swarm/lib, schemas, specialists"
+    check: "MYPYPATH=. python3 -m mypy --explicit-package-bases -p swarm.lib -p swarm.schemas -p swarm.specialists --ignore-missing-imports --no-strict-optional --disable-error-code=no-untyped-def --disable-error-code=var-annotated 2>&1 | tail -1 | grep -q -E 'Success|no issues'"
+    timeout_sec: 60
+    idempotent: true
+
+  - id: swarm_cli_exists
+    description: "swarm-cli admin tool exists and is executable"
+    check: "test -x swarm/swarm-cli"
+    timeout_sec: 5
+    idempotent: true
+
+  - id: swarm_cli_list_sessions
+    description: "swarm-cli list-sessions command works"
+    check: "PYTHONPATH=. python3 swarm/swarm-cli list-sessions 2>&1 | grep -qE '(sessions|No sessions)'"
+    timeout_sec: 10
+    idempotent: true
+
+  - id: swarm_cli_inspect
+    description: "swarm-cli inspect rejects bogus session id"
+    check: "! PYTHONPATH=. python3 swarm/swarm-cli inspect nonexistent-session 2>&1"
+    timeout_sec: 10
+    idempotent: true
+
+  - id: swarm_cli_tests
+    description: "swarm-cli tests pass"
+    check: "PYTHONPATH=. python3 -m pytest swarm/tests/test_swarm_cli.py -q"
+    timeout_sec: 30
+    idempotent: true
+
+  - id: hypothesis_tests_exist
+    description: "Property-based tests for locking + event-scribe invariants"
+    check: |
+      test -f swarm/tests/test_locking_properties.py &&
+      test -f swarm/tests/test_event_scribe_properties.py
+    timeout_sec: 5
+    idempotent: true
+
+  - id: hypothesis_tests_pass
+    description: "Property-based tests execute cleanly"
+    check: "PYTHONPATH=. python3 -m pytest swarm/tests/test_locking_properties.py swarm/tests/test_event_scribe_properties.py -q"
+    timeout_sec: 120
+    idempotent: true
+
+  - id: v4_metrics_recorded
+    description: "v4 metrics captured"
+    check: "PYTHONPATH=. python3 -c 'import json; d=json.load(open(\"swarm/metrics.json\")); v4=[c for c in d[\"cycles\"] if c[\"version\"].startswith(\"v4\")]; assert v4 and v4[-1][\"tests_passing\"] >= 226'"
+    timeout_sec: 5
+    idempotent: true
+
+  - id: test_count_above_240
+    description: "Test count ≥ 240 (v4 had 226)"
+    check: |
+      count=$(PYTHONPATH=. python3 -m pytest swarm/tests/ --collect-only -q 2>&1 | grep -E "[0-9]+ tests? collected" | grep -oE "^[0-9]+")
+      test -n "$count" && test "$count" -ge 240
+    timeout_sec: 60
+    idempotent: true
+
+verification:
+  run_every_sec: 30
+  hold_window_sec: 60
+  path_add:
+    - "/Users/npow/anaconda3/envs/py310/bin"
+    - "/Users/npow/.local/bin"
+  env_passthrough:
+    - PYTHONPATH
+    - HOME
+
+invariants:
+  test_count_floor: 226
+
+concurrency:
+  max_total_live: 8
+  max_depth: 4
+  max_fan_out_per_parent: 3
+
+observer_config:
+  plan_checkpoint_every_sec: 300
+
+anticheat:
+  primary: "claude -p --bare --model opus"

@@ -1,0 +1,647 @@
+# Swarm Durability & Auto-Invocation Redesign
+
+**Date:** 2026-04-18
+**Status:** Draft — pending review
+**Authors:** npow + Claude (brainstorming session)
+
+## 1. TL;DR
+
+Rebuild swarm on top of Temporal so mission execution survives any transient failure (API errors, process death, machine reboot), and add an LLM-based classifier on `UserPromptSubmit` so mission-shaped tasks get enforcement automatically — without relying on the human to remember `/swarm`.
+
+The existing mission-enforcement value (success criteria, anti-cheat, pattern detection, hash-pinned missions) is preserved. The existing `launch.sh` bash harness and the six daemon-process specialists (pattern_detector, success_verifier, coordinator, supervisor, llm_loop, resource_monitor) are replaced by a Temporal workflow tree and a cascading classifier.
+
+## 2. Motivation
+
+Two concrete pain points drove this redesign:
+
+**2.1. Fragility.** On 2026-04-18, a swarm session running for 28 minutes died with `API Error: 424 status code (no body)` from Anthropic. The `claude` CLI exited once, the `trap cleanup EXIT` in `launch.sh` fired, all six specialists were SIGKILL'd, settings were restored, and the session was gone. State on disk (events.jsonl, findings.jsonl, verifier_status.json, and the mission's actual output in `DESIGN.md`) survived — but there was no way to resume. 28 minutes of work lost to a single transient API blip.
+
+This is structurally unavoidable with the current architecture because `launch.sh` invokes `claude` exactly once, not inside any retry loop, with no resume primitive:
+
+```bash
+# launch.sh:98
+PYTHONPATH="$REPO_ROOT" SESSION_ID="$SESSION_ID" SWARM_ROOT="$SWARM_ROOT" \
+  claude --session-id "$SESSION_ID" "$MISSION_PROSE"
+```
+
+Any non-zero exit from `claude` tears everything down.
+
+**2.2. Forgotten enforcement.** The `/swarm` slash command requires the human to remember to invoke it. For tasks that *should* be mission-enforced ("build X", "fix Y", "refactor Z"), forgetting means the task runs under normal chat semantics — no success criteria, no anti-cheat LLM review, no pattern detection, no hold-window guarantee. The work proceeds but whatever premature-completion / scope-drift / drift-to-over-scope failure modes the enforcement layer exists to catch are now unchecked.
+
+Humans forget. Discipline is the worst failure mode to rely on.
+
+## 3. Goals
+
+1. **A mission survives any transient failure and resumes automatically.** API errors (424, 429, 5xx), process crashes, worker reboots, machine reboots — none of these should require human intervention.
+2. **Mission-shaped work gets enforcement automatically.** Without the human typing `/swarm`, without the chat agent self-classifying (which it has incentive to misclassify toward "not mission").
+3. **Existing enforcement primitives (criteria, anti-cheat, patterns) are preserved** — this is swarm's unique value.
+4. **Pre-mission chat stays unencumbered.** Brainstorming, Q&A, exploration, meta-queries about missions — all remain ordinary conversation, not wrapped in mission enforcement.
+
+## 4. Non-goals
+
+- Migration plan from today's swarm to new swarm. (Will be a separate spec / plan when ready to build.)
+- Temporal server lifecycle management. Temporal is a user-managed prerequisite (`temporal server start-dev`), not something swarm starts or monitors.
+- Multi-user, multi-tenant, or distributed operation. Swarm is a single-user personal tool at N=1.
+- Replacing Claude Code CLI as the agent runtime. The mission subprocess continues to be `claude --session-id <sid>` on first launch and `claude --resume <sid>` on every retry. (The `run_agent` activity boundary is narrow enough that a future swap to Goose or custom SDK is possible without redesigning the workflow layer.)
+- Fine-tuning the classifier. Static prompt with an audit log for manual review. Learning is future work.
+
+## 5. Design principles
+
+1. **Workflow = entity with independent lifecycle; Activity = side-effectful unit of work.** Use Temporal primitives idiomatically. Don't decompose for aesthetics.
+2. **The jailer is not the prisoner.** The classifier that decides "is this a mission?" runs outside the chat agent's session, because the chat agent has incentive to say "no".
+3. **Fail open, never block.** Every safety layer (classifier, hooks, verifier) has a timeout and defaults to letting the user continue. A broken classifier should never wedge chat.
+4. **Temporal history is source of truth; disk is grep-friendly mirror.** Workflow state lives in Temporal. Raw claude hook events and findings are mirrored to JSONL files for external consumption (grep, Monitor tools, human inspection), but are never authoritative.
+5. **Missions are separate processes from chat.** The mission-enforced subprocess is a second `claude` process with its own workspace and settings. The human's chat session is never "mission-enforced" — chat stays chat.
+6. **Workflow code is deterministic.** Temporal replays workflow history on resume; workflow code MUST produce the same decisions on replay. Use `workflow.now()` (not `datetime.now()`), `workflow.sleep()` (not `asyncio.sleep()`), `workflow.uuid4()` (not `uuid.uuid4()`), `workflow.random()` (not `random.random()`). No I/O, no file reads, no network calls, no non-deterministic stdlib inside workflow functions. All side effects go through activities. Pseudocode in this spec uses `now` as shorthand for `workflow.now()` — the implementation must use Temporal's deterministic primitives.
+7. **Enforcement primitives are not collapsed.** Today's swarm has 7 distinct enforcement subsystems (6-dim anti-cheat panel, tamper detection, invariant enforcement, coordinator routing, scope-shrinking detection, intervention ACK flow, completion judge). The rewrite preserves each as named activities or workflow-handler code — see §6.4 for the mapping table. "Preserved" means: existing mission.yaml configs keep working, existing test fixtures still pass, the cheat-space is not widened.
+
+## 6. Architecture
+
+### 6.1 Layering
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│ Layer 3: Durability / orchestration                               │
+│   Temporal (user-managed local server)                            │
+├───────────────────────────────────────────────────────────────────┤
+│ Layer 2: Mission controller (this spec)                           │
+│   MissionWorkflow + child workflows + activities                  │
+│   Preserves enforcement: criteria, anti-cheat, patterns, tamper   │
+├───────────────────────────────────────────────────────────────────┤
+│ Layer 1: Agent runtime (unchanged)                                │
+│   claude CLI — session-id resume, hooks, skills, MCP, subagents   │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### 6.2 Shape D: mission as parent workflow
+
+One Temporal workflow per mission. Three child workflows for the genuinely-independent observational concerns. Everything else is activities called from the parent.
+
+```
+MissionWorkflow  (parent, long-running — one per mission)
+├── state (authoritative, persisted by Temporal):
+│     phase: "launching" | "running" | "passing" | "hold_window" |
+│            "complete" | "aborting" | "aborted" | "failed_terminal"
+│     criteria_state: {criterion_id: {pass: bool, last_check_ts, streak_sec, ...}}
+│     hold_window_start: datetime | None
+│     findings_count: int
+│     abort_reason: str | None
+│
+├── signals received:
+│     finding_emitted(finding)           ← from any child workflow
+│     intervention_request(action)       ← from pattern_detector
+│     abort(reason)                      ← from user CLI
+│     pause() / resume()                 ← from user CLI (future)
+│
+├── queries (read-only, no history entry):
+│     get_status()  -> phase + criteria summary
+│     get_findings() -> recent findings
+│
+├── activity: run_claude_cli (long-running, one outstanding at a time)
+│     heartbeat every 30s with progress payload
+│     retries transient errors, classifies per §7
+│     uses --resume <sid> on every retry
+│
+├── inline verifier loop (timer-driven, in the workflow):
+│     # "now" below = workflow.now() per §5 determinism contract
+│     every verification.run_every_sec:
+│       # 1. Tamper check BEFORE criteria (same as today's success_verifier cycle order)
+│       tamper = execute_activity(verify_tamper, session_id)
+│       if tamper.detected:
+│         signal self: finding_emitted(tamper.finding)  # sets abort_reason via handler
+│       # 2. Invariant enforcement (no_mock, test_count_floor, assertion_count_floor, allowed_deps)
+│       inv = execute_activity(enforce_invariants, session_id, mission.invariants)
+│       for finding in inv.findings: signal self: finding_emitted(finding)
+│       # 3. Criterion checks (parallel fan-out)
+│       results = parallel: execute_activity(check_criterion, c) for c in mission.criteria
+│       update criteria_state from results
+│       if all(pass) and phase != "hold_window":
+│         # 3a. Pass-transition → trigger anti-cheat panel on each newly-passing criterion
+│         for c in results.newly_passed:
+│           signal llm_critic_child: anticheat_requested(criterion=c, context=recent_events)
+│         transition to "hold_window"; set hold_window_start = workflow.now()
+│       elif any(not pass) and phase == "hold_window":
+│         reset hold_window_start = None; transition back to "running"
+│       elif phase == "hold_window":
+│         elapsed = workflow.now() - hold_window_start
+│         if elapsed >= hold_window_sec:
+│           # 3b. Completion judge (blocks on cheat/fabrication/tamper findings)
+│           if execute_activity(completion_judge, mission_state).approved:
+│             transition to "complete"; break
+│           else: emit finding "completion_blocked", continue loop
+│       # 4. History-bounding: continue_as_new when Temporal suggests it.
+│       #    is_continue_as_new_suggested() covers both event count and byte size.
+│       if workflow.info().is_continue_as_new_suggested():
+│         carry = {phase, criteria_state, hold_window_start, findings_count,
+│                  child_workflow_ids, strikes_by_dimension, tried_strategies,
+│                  spawn_tree, pending_interventions}
+│         workflow.continue_as_new(MissionWorkflow, mission, carry)
+│       await workflow.sleep(verification.run_every_sec)
+│
+│ --- continue_as_new child-workflow contract ---
+│ Child workflows use fixed workflow IDs derived from mission_id:
+│   {mission_id}_pattern_detector, {mission_id}_llm_critic, {mission_id}_resource_monitor.
+│ On workflow start, the parent checks `carry` (populated only on continue_as_new):
+│   - If carry is empty (first launch): start_child_workflow for each of the 3 children.
+│   - If carry is non-empty (resumed): skip start_child_workflow. Re-acquire handles
+│     via workflow.get_external_workflow_handle(id). Do NOT call start_child_workflow
+│     again — Temporal would raise WorkflowAlreadyStartedError.
+│ Signals from children to the parent route by parent's workflow ID, which is STABLE
+│ across continue_as_new chains per Temporal's contract — existing signals arrive at
+│ the new incarnation without re-subscription.
+│ Children are started with parent_close_policy=TERMINATE, so mission completion or
+│ abort tears down the full tree. Children themselves run their own continue_as_new
+│ cycles (500 events / 200 cycles) independently.
+│
+└── child workflows (started at mission launch, cancelled at completion):
+    ├── PatternDetectorWorkflow(mission_id, session_id, cadence_sec)
+    │     tails ~/.swarm/state/<sid>/events.jsonl
+    │     runs pattern rules, emits findings via signal to parent
+    │     ContinueAsNew every 500 events to bound history
+    │     cadence_sec default 10s, override via mission.yaml observer_config.pattern_detector_sec
+    │
+    ├── LLMCriticWorkflow(mission_id, session_id, cadence_sec)
+    │     Three distinct functions — each with its own trigger, preserving today's arch:
+    │     (a) cadence-driven progress audits — invoke progress_audit activity
+    │     (b) cadence-driven goal-drift checks — invoke goal_drift_check activity
+    │     (c) event-triggered anti-cheat panel on anticheat_requested signal from parent
+    │         (fired on criterion pass-transitions; see verifier loop step 3a):
+    │         parallel fan-out: execute_activity(run_anticheat_dimension, d, ctx)
+    │         for d in ['scope_reduction','mock_out','tautology','hardcode',
+    │                   'off_criterion','coordinated_edit']
+    │         aggregate panel verdicts; optionally run second_opinion from mission.anticheat
+    │     all three emit findings via signal to parent
+    │     cadence_sec default 120s, override via mission.yaml observer_config.llm_critic_sec
+    │     ContinueAsNew every 200 cycles to bound history
+    │
+    └── ResourceMonitorWorkflow(mission_id, session_id, cadence_sec)
+          zombie/memory/disk checks on cadence
+          emits findings via signal to parent
+          cadence_sec default 30s, override via mission.yaml observer_config.resource_monitor_sec
+```
+
+Why these three are child workflows (not activities called by parent): each runs a continuous loop with its own cadence, its own failure mode, its own state. They can be independently restarted without disturbing the others. They can be versioned independently.
+
+Why criteria are NOT child workflows: a criterion is a predicate evaluated on a timer. It has no independent lifecycle — it's a parameter to the mission. Making each criterion a workflow adds coordination plumbing (signals between parent and N children) for no lifecycle benefit.
+
+Why `run_claude_cli` is an activity (not a workflow): it has a clear beginning and end (one process invocation), it's the primary work the mission does, and its state (the conversation) is managed by the `claude` CLI itself via session-id. Wrapping it as an activity gives us retry + heartbeat + timeout + cancellation without the history-size cost of making it a workflow.
+
+### 6.3 Activities
+
+| Activity | Purpose | Notes |
+|---|---|---|
+| `run_claude_cli(session_id, mission_prose)` | Launches the mission subprocess. Spawns `claude` in its own process group (`start_new_session=True`) so the activity can reliably SIGTERM the group on cancellation. Chooses between `claude --session-id <sid>` (first attempt via `activity.info().attempt == 1`) and `claude --resume <sid>` (subsequent attempts). Streams stdout/stderr to disk. Heartbeats on an independent 30s timer (NOT tied to event emission — handles long reasoning pauses). On `CancelledError`: SIGTERM process group, wait 5s, SIGKILL. Returns on clean exit or raises classified error. | Long-running (minutes to hours). Session state must be available to retrying workers; multi-worker deployments require shared `~/.claude/` filesystem OR the activity falls back to fresh `--session-id` start with mission prose on missing session. |
+| `check_criterion(criterion)` | Runs one criterion's shell check. Returns `{pass: bool, exit_code, stdout_tail, stderr_tail, duration_ms}`. Idempotent. | Short (seconds). Subject to `criterion.timeout_sec`. |
+| `verify_tamper(session_id)` | Reads `mission.lock.json` (in-tree) + `~/.config/swarm/locks/<sid>.sha` (out-of-tree) and re-hashes all hash-pinned files. Returns `{detected: bool, finding: Finding \| None}`. Idempotent. Called every verifier cycle before criterion checks. | Short (<1s). Preserves today's `verify_tamper()` behavior from `success_verifier.py`. |
+| `enforce_invariants(session_id, invariants)` | Runs no_mock, test_count_floor, assertion_count_floor, allowed_deps checks against mission.yaml's `invariants` block. Returns `{findings: [Finding]}`. Idempotent. Called every verifier cycle alongside criterion checks. | Short (<5s). Preserves `success_verifier.enforce_invariants()`. |
+| `progress_audit(session_id, window)` | Samples recent transcript events + verifier deltas, invokes Haiku to judge whether meaningful progress is happening. Returns `{verdict, rationale, findings: [Finding]}`. | Medium (~5s). Preserves today's `progress_auditor.py`. Cadence-driven via LLMCriticWorkflow. |
+| `goal_drift_check(session_id, window)` | Samples recent activity, invokes Haiku to judge goal-drift. Returns `{verdict, rationale, findings: [Finding]}`. | Medium (~5s). Preserves today's `goal_drift_critic.py`. Cadence-driven via LLMCriticWorkflow. |
+| `run_anticheat_dimension(dimension, criterion_id, diff, events, check_command, anticheat_config)` | Invokes ONE dimension's adversarial critic from the 6-dim panel. Model from `anticheat_config.primary` (mission.yaml, defaults to `claude -p --bare --model opus`). Returns `{dimension, verdict: "pass"\|"fail"\|"suspicious", rationale}`. 6 of these run in parallel from LLMCriticWorkflow. Optionally paired with `second_opinion` model for cross-provider diversity. | Medium. Preserves `anticheat_critic_panel.run_panel()` semantics. Critical for cheat detection. |
+| `completion_judge(mission_state)` | Checks today's 6 preconditions before allowing mission→complete transition: hold_window recency, no open cheat findings, no open fabrication findings, no open tamper findings, no critic disagreements, per-criterion anticheat passes. Returns `{approved: bool, reasons: [str]}`. | Short (<1s). Preserves `completion_judge.py`. Called from verifier loop step 3b. |
+| `intervention_judge(finding, strikes_by_dimension, tried_strategies)` | Classifies a finding into an intervention: `{tier, strategy, nudge_text}`. Encodes today's escape-ladder policy (rung progression, strike accumulation, halt_and_alert for mission-level issues). Returns the intervention struct. Pure function — no side effects; safe to call from workflow signal handler. | Short (<100ms). Could be inlined into workflow code if determinism-safe; listed as activity for flexibility. Preserves `intervention_judge.py`. |
+| `spawn_subagent(config, admission_snapshot)` | Starts a subagent process with given config. Admission control (max_total_live, max_depth, max_fan_out_per_parent from mission.yaml `concurrency`) is enforced by the CALLER (MissionWorkflow) before invoking this activity; `admission_snapshot` is the per-parent tree state used to validate at call time. Spawns subagent in own process group. Heartbeats until subagent exits. Returns `{status, output, final_pid}`. | Long-running. RECOVERY context (prior findings, tried strategies) propagated via `config.context_prose`. |
+| `restart_subprocess(name)` | Restarts a specialist or subagent subprocess by name. Idempotent by design. | Short. Currently covered by child workflows but retained for ad-hoc restarts. |
+| `emit_finding(finding)` | Appends to `findings.jsonl` on disk AND returns. Called by parent workflow from the signal-handler path (so disk mirror stays in sync with Temporal history). Also appends to `interventions.jsonl` when called on intervention-typed findings, so today's hook-based intervention consumption path continues to work unchanged. | Short. |
+| `classify_prompt(prompt, context)` | Calls Haiku to classify user prompt as MISSION / CHAT / META. Returns `{verdict, confidence, reason}`. | Short (<2s with timeout). Not called by MissionWorkflow — called by the UserPromptSubmit hook directly. Listed here for completeness. |
+
+### 6.4 Enforcement-primitive migration table
+
+Today's swarm has 7 distinct enforcement subsystems, spread across ~1300 lines in `specialists/` and `lib/`. The rewrite maps each to a concrete new-architecture location. "Preserved" means the behavior survives; the implementation path is spelled out below.
+
+| # | Today's primitive | Today's location | New home | Trigger |
+|---|---|---|---|---|
+| 1 | 6-dim anti-cheat panel (scope_reduction, mock_out, tautology, hardcode, off_criterion, coordinated_edit) | `anticheat_critic_panel.py` (309 lines) | `run_anticheat_dimension` activity, fan-out from `LLMCriticWorkflow` | `anticheat_requested` signal from parent on criterion pass-transition (verifier loop step 3a) |
+| 2 | Tamper detection (file-hash verify against lock) | `success_verifier.verify_tamper()` (47 lines) | `verify_tamper` activity | Called first in every verifier-loop iteration (step 1) |
+| 3 | Invariant enforcement (no_mock, test_count_floor, assertion_count_floor, allowed_deps) | `success_verifier.enforce_invariants()` (151 lines) | `enforce_invariants` activity | Called in every verifier-loop iteration (step 2) |
+| 4a | Goal-drift checks (cadence-driven LLM review) | `goal_drift_critic.py` + `llm_loop.py` | `goal_drift_check` activity, called from `LLMCriticWorkflow` | Cadence-driven, configurable via `observer_config.llm_critic_sec` |
+| 4b | Progress audits (cadence-driven LLM review) | `progress_auditor.py` + `llm_loop.py` | `progress_audit` activity, called from `LLMCriticWorkflow` | Cadence-driven, same cadence as drift |
+| 5 | Finding → intervention routing (tier/strategy decision, escape-ladder progression, strike tracking, tried-strategy tracking, reissue-after-120s for unacked, plan-checkpoint cadence) | `coordinator.py` (405 lines) + `intervention_judge.py` (183 lines) | `MissionWorkflow` signal handler for `finding_emitted`, which calls `intervention_judge` activity. Escape-ladder state (`strikes_by_dimension`, `tried_strategies`) lives in workflow state. Reissue timer fires via `workflow.sleep(120)` child task. Plan-checkpoint cadence fires via separate `workflow.sleep` loop controlled by `observer_config.plan_checkpoint_every_sec`. | Mixed: signal-driven + timer-driven |
+| 6a | Event-stream pattern detection (loop, oscillation) | `pattern_detector.py` lines 43–141 | `PatternDetectorWorkflow` main loop | Tails `events.jsonl` |
+| 6b | Transcript scope-shrinking detection | `pattern_detector.py` lines 144–247 (`detect_scope_shrinking`) | Same `PatternDetectorWorkflow`, additional activity `detect_scope_shrinking` invoked when parent signals `all_criteria_passing` | Gated by verifier status; parent signals the child on pass-transitions |
+| 7 | Intervention ACK flow (coordinator writes `interventions.jsonl`, claude hooks read + ack) | `lib/interventions.py` + hooks | Unchanged on the read path: `emit_finding` activity mirrors interventions into `interventions.jsonl` on disk so existing hooks (`on_stop.py`, `on_session_start.py`) continue to read and ack unchanged. ACK flows back from hook → `interventions-acked.jsonl` on disk → `PatternDetectorWorkflow` tails the ack file and signals parent to clear from pending. | Disk-based (preserved) with workflow signal round-trip |
+| 8 | Completion gating (6 preconditions block `complete` transition) | `completion_judge.py` (169 lines) | `completion_judge` activity | Called at end of hold_window in verifier-loop step 3b |
+| 9 | Subagent admission control + RECOVERY context + tree state | `spawner.py` (queueing, tree, zombies) | Admission control lives in `MissionWorkflow` state (`spawn_tree: dict` tracks live_count, depth, per_parent_fan_out). `spawn_subagent` activity enforces via `admission_snapshot` param. Queue lives in workflow state. Tree is Temporal-durable. RECOVERY context propagated via `config.context_prose`. Zombie reaping is unnecessary — Temporal tracks activity lifecycle. | Signal-driven (finding with `strategy=recover` triggers spawn) |
+
+**Behaviors EXPLICITLY DROPPED from today's swarm** (fail-fast list — implementer must not silently drop anything else):
+- None. If a reviewer finds an enforcement primitive in today's code that isn't in this table, that's a defect in this spec.
+
+**Plan-checkpoint interventions** (today's `_PLAN_CHECKPOINT_REASON` periodic "state your plan" intervention from `coordinator.py`): preserved as a separate `workflow.sleep(observer_config.plan_checkpoint_every_sec)` loop that emits plan-checkpoint-typed interventions via the signal handler path.
+
+**Human-initiated interventions** (today possible via manual edit of `interventions.jsonl`): preserved — `emit_finding` activity appends to the disk file, and the reverse path (disk file → workflow) is via the same `PatternDetectorWorkflow` tail that handles ACKs: it detects externally-added interventions and signals the parent.
+
+## 7. Error classification & retry policies
+
+### 7.1 Error taxonomy
+
+| Code / condition | Class | Rationale |
+|---|---|---|
+| HTTP 200 | Success | — |
+| HTTP 400 | Terminal | Malformed request; won't succeed on retry. |
+| HTTP 401, 403 | Terminal | Auth/authz; needs human. |
+| HTTP 404 | Terminal | Endpoint or resource gone. |
+| HTTP 408 | Transient | Timeout; retry. |
+| HTTP 424 | Transient | Observed in the 2026-04-18 crash. Anthropic-specific; treat as transient-but-loud (emit finding). |
+| HTTP 429 | Transient | Rate limit. Honor `Retry-After` header. |
+| HTTP 500, 502, 503, 504 | Transient | Server-side transient. |
+| Network refused / reset / timeout | Transient | Local blip or server down. |
+| Subprocess killed by OOM | Transient | Retry after resource_monitor clears OOM pressure. |
+| Subprocess timeout (heartbeat expired) | Transient | Temporal retries on fresh worker. |
+| Context window exceeded | Terminal | Requires compaction or fresh session; fail mission with clear message. |
+| Billing exceeded | Terminal | Needs human. |
+| `SIGKILL` from user | Terminal | Explicit user cancellation. |
+
+Implementation:
+
+```python
+# swarm/durable/errors.py
+TRANSIENT_HTTP = {408, 424, 429, 500, 502, 503, 504}
+TERMINAL_HTTP = {400, 401, 403, 404}
+
+class SwarmActivityError(Exception):
+    classification: Literal["transient", "terminal"]
+    retry_after: Optional[float] = None
+
+# Temporal retry policy consumes non_retryable_error_types
+NON_RETRYABLE = [
+    "TerminalHTTPError",
+    "AuthError",
+    "BillingError",
+    "ContextOverflowError",
+    "UserCancelledError",
+]
+```
+
+### 7.2 Retry policies per activity
+
+| Activity | Initial interval | Max interval | Backoff | Max attempts | Heartbeat timeout |
+|---|---|---|---|---|---|
+| `run_claude_cli` | 2s | 5min | ×2 | 20 | 2min |
+| `check_criterion` | 1s | 30s | ×2 | 5 | (short activity, no heartbeat needed) |
+| `verify_tamper` | 1s | 10s | ×2 | 3 | — |
+| `enforce_invariants` | 1s | 10s | ×2 | 3 | — |
+| `progress_audit` | 2s | 30s | ×2 | 5 | 30s |
+| `goal_drift_check` | 2s | 30s | ×2 | 5 | 30s |
+| `run_anticheat_dimension` | 5s | 5min | ×2 | 10 | 2min |
+| `completion_judge` | 1s | 10s | ×2 | 3 | — |
+| `intervention_judge` | 100ms | 2s | ×2 | 3 | — |
+| `spawn_subagent` | 2s | 1min | ×2 | 3 | 1min |
+| `restart_subprocess` | 1s | 10s | ×2 | 5 | — |
+| `emit_finding` | 100ms | 5s | ×2 | 3 | — |
+| `classify_prompt` | (no retry — fail-open to CHAT) | — | — | 1 | — |
+
+All activities set `non_retryable_error_types=NON_RETRYABLE`.
+
+### 7.3 Heartbeats
+
+`run_claude_cli` is the durability-critical activity. The activity runs the subprocess and heartbeats back to Temporal on a cadence:
+
+```python
+@activity.defn
+async def run_claude_cli(session_id, mission_prose) -> ClaudeResult:
+    # Attempt number (1 = first launch, 2+ = retry)
+    attempt = activity.info().attempt
+    use_resume = (attempt > 1)  # first attempt uses --session-id; retries use --resume
+    proc = spawn_claude(session_id, mission_prose, use_resume=use_resume)
+    latest = {"last_event_id": None, "last_tool": None, "event_count": 0}
+
+    async def heartbeat_loop():
+        # Independent 30s timer — NOT tied to event emission. Handles long
+        # reasoning pauses (claude can run 3-5min without emitting tool events).
+        while not proc.exited:
+            activity.heartbeat(latest)
+            await asyncio.sleep(30)
+
+    async def event_loop():
+        async for event in tail_events(session_id):
+            latest.update({"last_event_id": event.id, "last_tool": event.tool_name,
+                           "event_count": event.count})
+
+    try:
+        await asyncio.gather(heartbeat_loop(), event_loop(), wait_for_exit(proc))
+    except asyncio.CancelledError:
+        # On swarm abort: SIGTERM process group, wait 5s, SIGKILL
+        os.killpg(proc.pid, signal.SIGTERM)
+        try: await asyncio.wait_for(wait_for_exit(proc), timeout=5)
+        except asyncio.TimeoutError: os.killpg(proc.pid, signal.SIGKILL)
+        raise
+
+    if proc.exit_code != 0:
+        raise classify_error(proc.exit_code, proc.stderr)
+    return ClaudeResult(events=latest["event_count"])
+```
+
+The heartbeat payload also powers the `get_status` query — the parent workflow can read the most recent heartbeat without waiting for activity completion.
+
+If the worker dies silently (segfault, OOM, machine reboot), Temporal detects the heartbeat gap after `heartbeat_timeout` and retries the activity on a fresh worker. The fresh worker's `activity.info().attempt` returns 2+, so `use_resume=True`, invoking `claude --resume <sid>` — conversation state is preserved by the claude CLI's own session storage (`~/.claude/`), so the mission picks up from the last completed tool call.
+
+### 7.4 Context overflow policy
+
+If `run_claude_cli` raises `ContextOverflowError`, the mission is marked `failed_terminal` with a structured reason. Auto-compaction is deferred (see §11 open questions).
+
+## 8. State management
+
+### 8.1 What lives in Temporal (authoritative)
+
+All state that affects resume or completion semantics:
+
+- Mission phase and transitions
+- Per-criterion pass/fail + streak timer + last-check metadata
+- Hold-window start timestamp (bug fix from today's implementation where this isn't durably tracked)
+- Pending and acked interventions (delivered as signals, persisted in history)
+- Specialist-child workflow state (each child owns its own)
+- All signals received and activity results (standard Temporal history)
+
+### 8.2 What stays on disk (telemetry / mirror)
+
+Written by hooks or as side effects; cheap, grep-able, consumable by external tools:
+
+- `~/.swarm/state/<sid>/events.jsonl` — raw claude hook events. Written by `PostToolUse` shell-script hook inside the claude subprocess. Never touches Temporal directly.
+- `~/.swarm/state/<sid>/events_detail/<event_id>.json` — per-event detail blobs.
+- `~/.swarm/state/<sid>/findings.jsonl` — mirror of signal-delivered findings. Written by the parent workflow's signal handler via the `emit_finding` activity. Temporal history is authoritative; this file is for external grep.
+- `~/.swarm/state/<sid>/*.log` — subprocess stdout/stderr logs (specialists + claude).
+- `~/.swarm/locks/<sid>.sha` — mission hash-pin for tamper detection. Kept.
+- Workspace artifacts — the actual mission output, lives in the user's workspace dir. Not swarm state.
+
+### 8.3 Hook-to-workflow bridge
+
+The `claude` subprocess runs `PostToolUse` hooks as shell scripts (fast, no Temporal client in the hot path). Events flow:
+
+```
+claude subprocess
+    │ PostToolUse hook (appends one line)
+    ▼
+~/.swarm/state/<sid>/events.jsonl      [raw telemetry on disk]
+    │
+    │ PatternDetectorWorkflow's tail activity reads the stream
+    ▼
+PatternDetectorWorkflow
+    │ pattern matched → finding
+    ▼
+    signal to parent MissionWorkflow: finding_emitted(finding)
+    │
+    ▼
+MissionWorkflow signal handler
+    ├── calls emit_finding activity (mirrors to findings.jsonl for external grep)
+    ├── updates internal state (e.g., tamper detected → sets abort_reason)
+    └── may signal llm_critic child to judge the finding
+```
+
+This avoids two problems that would otherwise arise from running a Temporal client inside the hook script: (1) hook startup latency (Temporal SDK import ~100ms) and (2) history bloat (one history entry per hook invocation; thousands per mission).
+
+### 8.4 Resume semantics
+
+**API error mid-mission.** Activity raises transient error. Temporal retries per policy. `run_claude_cli` re-invokes with `--resume` on every retry. For the 2026-04-18 failure class, the retry interval would have been ~2-8s. Mission continues.
+
+**Worker process death (kill -9, segfault, OOM).** Temporal detects heartbeat gap after 2min. Retries `run_claude_cli` on a fresh worker (which may be the same PID respawned or a different process if multiple workers run). Fresh worker calls `claude --resume <sid>`; conversation state restored from `~/.claude/`.
+
+**Machine reboot.** Temporal server's SQLite persistence survives. On reboot: user starts Temporal (`brew services start temporal` or similar), user starts `swarm worker`, Temporal replays workflow history to reconstruct state, activities resume. No human intervention on mission content.
+
+**User aborts.** `swarm abort <workflow_id>` sends `abort` signal. Parent sets phase=`aborting`, cancels `run_claude_cli` activity (which SIGTERMs the claude subprocess), cancels child workflows, workflow exits with `{status: "aborted", reason: "user"}`.
+
+**Mission completes.** Parent workflow returns result; child workflows are cancelled automatically via Temporal parent-child cleanup. Specialists shut down cleanly.
+
+**Terminal error.** Parent catches `TerminalHTTPError` / `AuthError` / etc., sets phase=`failed_terminal`, returns result with reason. No retry. Human must fix (e.g., re-auth).
+
+## 9. Invocation layer — classifier cascade
+
+### 9.1 Shape
+
+A `UserPromptSubmit` hook runs on every user turn and decides: MISSION, CHAT, or META. The decision is made by a cascade from cheap-and-certain to LLM-adjudicated:
+
+```
+UserPromptSubmit hook receives (prompt, last_5_turns)
+    │
+    ▼
+Stage 1 — explicit prefix (microseconds)
+    "/mission" | "/swarm" prefix → MISSION (confidence=1.0)
+    "/chat" | "/explore" | "just chat:" prefix → CHAT (confidence=1.0)
+    → if matched, skip to §9.3
+    │
+    ▼
+Stage 2 — rule gate (milliseconds)
+    regex: trailing "?" AND len(words) < 20 → CHAT (confidence=0.8)
+    regex: len(words) < 5 → CHAT (confidence=0.7)
+    regex: leading word in {explain, review, what, why, how, walk me through, help me understand}
+           → CHAT (confidence=0.75)
+    regex: leading verb in {build, fix, implement, add, create, refactor, write (tests|docs|code for)}
+           → MISSION (confidence=0.75)
+    regex: "how's the (mission|swarm|task)", "what did the mission", "show me the findings",
+           "abort|pause|resume" → META (confidence=0.85)
+    → if any rule fires with confidence >= 0.75, skip to §9.3
+    │
+    ▼
+Stage 3 — LLM classifier (Haiku 4.5, ~500ms)
+    Invokes classify_prompt activity
+    Returns {verdict: MISSION|CHAT|META, confidence: 0-1, reason: str}
+    2-second deadline; on timeout → CHAT, confidence=0 (fail open)
+    │
+    ▼
+Stage 4 — confidence gate (§9.3)
+```
+
+### 9.2 Classifier prompt (Stage 3)
+
+```
+You are classifying a user message into exactly one of three classes:
+
+MISSION — closed-form task with verifiable artifact output.
+  Examples: "build a CLI for X", "fix the bug in Y", "implement feature Z",
+            "add tests for Q", "refactor W to use pattern P".
+  Signals: has an observable end state, completion can be verified without
+           human opinion, produces a file or state change.
+
+CHAT — open-ended, exploratory, or conversational.
+  Examples: "explain this function", "what do you think about X",
+            "walk me through the codebase", "help me brainstorm Y".
+  Signals: no artifact, criterion would be "human approved", conversational.
+
+META — about an existing mission or swarm itself.
+  Examples: "how's the mission going?", "show me the findings",
+            "abort the current mission", "why did it stall?"
+  Signals: asks ABOUT a mission; is itself read-only.
+
+Recent conversation (last 5 turns, most recent last):
+{recent_context}
+
+User message:
+{prompt}
+
+Respond with JSON only:
+{"verdict": "MISSION|CHAT|META", "confidence": 0.0-1.0, "reason": "<short>"}
+```
+
+### 9.3 Confidence gate & actions
+
+**Hook contract constraint (read this first).** `UserPromptSubmit` hooks can only inject `hookSpecificOutput.additionalContext` — they cannot block, suppress, or short-circuit the chat agent's response to the user's original prompt. There is no `decision: "block"` for `UserPromptSubmit` (that exists only for Stop/SubagentStop). This forces the invocation layer to use ADVISORY injection + AGENT-INITIATED launch, not silent auto-launch. The table below reflects this constraint.
+
+| Verdict + confidence | Action |
+|---|---|
+| MISSION, conf ≥ 0.9 (high confidence) | Hook injects a STRONG system-reminder instructing the chat agent: "This prompt is mission-shaped (confidence X.XX). Before doing any work, call the `swarm.propose_criteria` MCP tool with the prompt + recent context; show the user the derived criteria via AskUserQuestion (single-tap confirm); then call `swarm.launch` MCP tool. Do NOT begin substantive work on the prompt before the user confirms." The chat agent still runs, but its first action is deterministic: call `swarm.propose_criteria`. No race, no duplicate work. |
+| MISSION, 0.6 ≤ conf < 0.9 | Same as above but reminder is softer (MEDIUM): agent MAY call `swarm.propose_criteria` or ask the user first. Still 1-tap confirmation either way. |
+| MISSION, conf < 0.6 | Treat as CHAT. Log as "suspected-mission, skipped" for audit. |
+| CHAT (any conf) | No-op. Normal chat. |
+| META (any conf) | Hook injects system-reminder: chat agent should invoke `swarm.query` MCP tool to answer (reads from Temporal query + disk findings), not re-do work. |
+| Classifier timeout or error | Treat as CHAT. Log as classifier-failure. |
+
+**Why not true auto-launch at ≥0.9:** the hook cannot prevent the chat agent from acting on the prompt. If the hook launched a mission AND the chat agent started implementing, you'd get racing writers on the same repo. The design trades zero-friction auto-launch for deterministic chat-agent-initiated launch — user sees one `AskUserQuestion` tap at high confidence.
+
+**Pre-launch validation (applies to all MISSION paths):** before calling `swarm.launch`, the chat agent validates the derived `mission.yaml` passes schema + sanity checks (≥1 criterion with non-trivial check command, workspace directory exists, criteria not trivially satisfiable). On validation failure, downgrade to explicit user-authored criteria instead of silent failure.
+
+**Workspace lock check (applies to all MISSION paths):** `swarm.launch` checks `$WORKSPACE/.claude/.swarm-lock` before installing settings. If another mission holds the lock, reject or queue per the user's choice in `AskUserQuestion`.
+
+### 9.4 Classifier configuration (locked)
+
+| Param | Value | Why |
+|---|---|---|
+| Model | Haiku 4.5 | Fast (~500ms), cheap (~$0.001/classification), accurate enough for 3-class problem with engineered prompt. Escalate to Sonnet tiebreaker only if accuracy is measurably bad in production. |
+| Caching | None | Hit rate <5% (prompts rarely verbatim-identical, context differs). Not worth invalidation complexity. |
+| Learning loop | Log-only | N=1 user, insufficient data for fine-tuning. Log `{ts, prompt_hash, context_hash, verdict, confidence, user_override, final_action}` to `~/.swarm/classifier.jsonl`. Manual review quarterly. |
+| Backend | Anthropic API | Reuses claude CLI's auth. No local model (offline not a priority, and 8B-class local models are slower and less accurate). |
+| Timeout | 2000ms | Longer kills responsiveness. |
+| Failure mode | Fail open to CHAT | Broken classifier never blocks the user. |
+
+### 9.5 Safety net — Stop-hook regression guard
+
+Even when the classifier routes to CHAT, a lightweight `Stop` hook runs after each chat turn that wrote files:
+
+```bash
+# ~/.claude/hooks/stop-regression-check.sh
+if files_changed_in_this_turn; then
+    timeout 5s repo_build_check && timeout 10s repo_unit_tests
+    if regression_detected; then
+        emit_system_reminder("Regression detected: <summary>. Investigate before continuing.")
+    fi
+fi
+```
+
+This catches the false-negative case where a task should have been classified MISSION (e.g., "add a log statement" that silently breaks the build). Not mission-level enforcement — a thin always-on regression guard.
+
+The hook must:
+- Have a hard 15-second total deadline (never block the user).
+- Skip if the repo has no build/test commands configured.
+- Be idempotent (safe to run on every turn).
+
+## 10. CLI surface
+
+```
+swarm launch <mission.yaml>          # starts MissionWorkflow, prints workflow_id
+swarm launch --interactive           # prompts for workspace + criteria, then launches
+swarm status [<workflow_id>]         # queries workflow (phase, criteria, hold_window)
+                                       # with no arg, shows all active missions
+swarm abort <workflow_id> [--reason] # sends abort signal, returns when phase=aborted
+swarm findings <workflow_id>         # tails findings.jsonl (disk mirror)
+swarm logs <workflow_id>             # streams claude subprocess stdout/stderr
+swarm worker                         # starts a worker daemon (long-running)
+                                       # multiple workers can run for higher availability
+swarm health                         # checks Temporal connectivity, worker liveness,
+                                       # classifier API, and prints readiness report
+swarm history <workflow_id>          # dumps Temporal workflow history
+                                       # (for post-mortem / debugging)
+```
+
+`swarm resume <workflow_id>` is deliberately not a command: resume is automatic, driven by Temporal. If a user wants to "resume", they start a worker and the in-flight workflows resume themselves. `swarm health` reports whether resume is progressing.
+
+## 11. File layout
+
+```
+swarm/
+├── cli.py                           # swarm launch / status / abort / worker / ...
+├── classifier/
+│   ├── hook.py                      # UserPromptSubmit hook entry point
+│   ├── rules.py                     # Stage 1 + 2 rule gate
+│   ├── llm.py                       # Stage 3 Haiku client
+│   └── prompts.py                   # classifier prompt templates
+├── durable/
+│   ├── workflow.py                  # MissionWorkflow (parent)
+│   ├── specialists/                 # child workflows
+│   │   ├── pattern_detector.py
+│   │   ├── llm_critic.py
+│   │   └── resource_monitor.py
+│   ├── activities/                  # activity implementations (see §6.3)
+│   │   ├── run_claude_cli.py
+│   │   ├── check_criterion.py
+│   │   ├── verify_tamper.py
+│   │   ├── enforce_invariants.py
+│   │   ├── progress_audit.py
+│   │   ├── goal_drift_check.py
+│   │   ├── run_anticheat_dimension.py
+│   │   ├── completion_judge.py
+│   │   ├── intervention_judge.py
+│   │   ├── detect_scope_shrinking.py
+│   │   ├── spawn_subagent.py
+│   │   ├── restart_subprocess.py
+│   │   └── emit_finding.py
+│   ├── errors.py                    # error classification (§7.1)
+│   ├── retry_policies.py            # per-activity policies (§7.2)
+│   └── worker.py                    # Temporal worker entrypoint (swarm worker)
+├── schemas/
+│   ├── mission.py                   # mission.yaml schema (existing)
+│   ├── criterion.py                 # per-criterion schema
+│   └── finding.py                   # finding schema (used by signals)
+├── hooks/
+│   ├── post_tool_use.sh             # writes to events.jsonl (existing, kept)
+│   ├── user_prompt_submit.py        # classifier hook entrypoint (new)
+│   └── stop_regression_check.sh     # safety net (new, §9.5)
+├── mcp/
+│   └── server.py                    # MCP tools: swarm.propose_criteria, swarm.query
+├── docs/
+│   └── superpowers/specs/           # this document lives here
+└── settings.json.template           # kept, applied to workspace .claude/settings.json
+```
+
+What goes away:
+- `launch.sh` (replaced by `swarm launch` in cli.py, which talks to Temporal)
+- `_launch_helper.py` (mission prose extraction moves into cli.py)
+- `swarm-spawn` / `swarm-cli` (merged into unified `swarm` CLI)
+- `specialists/supervisor.py`, `specialists/spawner.py`, `specialists/coordinator.py` as daemon processes (orchestration moves into MissionWorkflow and its children)
+- `swarm/specialists/*.py` as module entrypoints (logic moves into `durable/specialists/*.py` as workflows)
+
+## 12. Locked decisions
+
+| Decision | Locked value |
+|---|---|
+| Workflow topology | Shape D: mission as parent; 3 child workflows (pattern_detector, llm_critic, resource_monitor); criteria as parent state; run_claude_cli as heartbeating activity |
+| Temporal deployment | User-managed local server (`temporal server start-dev`) as a prerequisite. Swarm fails fast with start-instructions if unreachable. |
+| Rewrite scope | Full — all specialists become workflows/activities. launch.sh goes away. |
+| Invocation | Classifier cascade on UserPromptSubmit; explicit `/mission` and `/chat` prefixes override. |
+| Classifier model | Haiku 4.5 |
+| Classifier caching | None |
+| Classifier learning | Log-only, manual review |
+| Classifier backend | Anthropic API |
+| Confidence thresholds | ≥0.9 STRONG injection → agent-initiated `swarm.propose_criteria` + 1-tap confirm; 0.6-0.9 MEDIUM injection → same but softer; <0.6 treat as CHAT. No silent auto-launch (hook contract limitation, §9.3). |
+| Classifier timeout | 2000ms, fail-open to CHAT |
+| Safety net | Stop-hook regression check on file-writing turns, 15s hard deadline |
+| Agent runtime (mission subprocess) | `claude --session-id <sid>` when `activity.info().attempt == 1`; `claude --resume <sid>` on subsequent attempts. Session state assumed local to worker (single-worker default) or shared via network filesystem (multi-worker). Unchanged from today. Activity boundary is narrow enough to swap later. |
+| Determinism contract | Workflow code uses `workflow.now()`, `workflow.sleep()`, `workflow.uuid4()` only. No `datetime.now()`, `asyncio.sleep()`, `random.random()`, or I/O inside workflow functions. See §5 principle 6. |
+| History bounding | `MissionWorkflow` calls `continue_as_new` when history exceeds 10,000 events. `PatternDetectorWorkflow` every 500 events. `LLMCriticWorkflow` every 200 cycles. Carry state: phase, criteria_state, hold_window_start, findings_count, child_workflow_ids, strikes_by_dimension, tried_strategies. |
+| Enforcement preservation | All 7 of today's enforcement primitives mapped 1:1 to new activities or workflow handler code per §6.4. No enforcement is silently dropped. If the reviewer finds a primitive in today's code that isn't in §6.4, that's a spec defect. |
+| Max mission duration | Set as Temporal `workflow_execution_timeout` from mission.yaml `max_duration_sec` (default 14400 = 4h). On timeout: phase→`failed_terminal`, reason=`max_duration_exceeded`. |
+| Abort process-group kill | `run_claude_cli` spawns subprocess with `start_new_session=True`. On `CancelledError`: SIGTERM process group (catches grandchild subagents), wait 5s, SIGKILL. |
+| Workspace lock | `$WORKSPACE/.claude/.swarm-lock` prevents concurrent missions from corrupting settings.json. `swarm launch` checks before installing settings. |
+
+## 13. Open questions / future work
+
+- **Context overflow handling.** Today: fail mission with terminal error. Future: auto-compact via `claude --compact` + re-attach, OR summarize-and-restart with fresh session. Decision deferred until we see the failure in practice.
+- **Classifier accuracy in production.** If false-positive rate on MISSION > 10% or false-negative rate > 5% (measured via `user_override` in `classifier.jsonl`), consider (a) Sonnet tiebreaker for `0.6-0.9 confidence`, (b) prompt tuning, (c) per-user rules layer.
+- **findings.jsonl ordering guarantees.** Temporal signals are durable and ordered per workflow. Disk mirror is eventual-consistency. If any external tool depends on strict ordering, switch to reading Temporal query instead.
+- **events.jsonl rotation.** Today's 28-min crashed session wrote 309KB + 68 detail files. At 24-hour missions this would be >10MB. Add rotation trigger in pattern_detector: when events.jsonl > 10MB, rotate to events.jsonl.1 and start fresh.
+- **Multi-mission concurrency.** Nothing in this design prevents N parallel missions on the same worker. Resource (API rate limits, disk I/O, memory) contention is unmodeled. If multi-mission becomes common, add worker-level admission control.
+- **Auto-derived criteria quality for `swarm.propose_criteria` MCP tool.** Per §9.3, high-confidence (≥0.9) MISSION classifications route through chat-agent-initiated launch with 1-tap user confirmation (NOT silent auto-launch — that was ruled out by hook-contract limitations). The `swarm.propose_criteria` MCP tool derives workspace, criteria, and hold_window defaults from prompt + conversation context. The quality of these derivations is the open question: needs a prompt template + heuristics + eval set. Treat as a separate sub-spec.
+- **Removing the Stop-hook safety net.** If classifier recall on MISSION-shaped prompts is high enough (measured), the safety net becomes redundant and adds latency. Keep until we have confidence in classifier recall.
+- **Anti-cheat LLM output handling.** `run_anticheat` verdicts currently feed into findings. Consider: should a `verdict=fail` from anti-cheat auto-trigger a user intervention signal (human must ack), or just emit a finding?
+
+## 14. Success criteria for this redesign (meta)
+
+A shell-checkable checklist for evaluating the implementation, once it exists:
+
+- Mission survives simulated API 424 for 60 continuous seconds without human intervention (Temporal retries succeed, criteria continue being verified).
+- `kill -9` on the worker process is followed by automatic recovery within 3 minutes when the worker restarts.
+- Machine reboot during mission leaves a runnable state: after Temporal + worker restart, `swarm status` shows `phase` matching pre-reboot and activities resume.
+- Classifier latency < 1s at p95 on real prompts.
+- Classifier accuracy > 90% on a hand-labeled set of 100 real prompts (measured before production rollout).
+- Hook overhead < 100ms on CHAT-classified prompts (rule gate short-circuits, no LLM call).
+- `swarm abort` transitions to `aborted` phase within 10 seconds.
+
+---
+
+**Next steps after user approval:** invoke `superpowers:writing-plans` skill to produce an implementation plan broken into executable chunks with per-step verification.
