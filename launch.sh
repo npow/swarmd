@@ -131,6 +131,19 @@ done
 cleanup() {
   echo ""
   echo "Swarm: tearing down session $SESSION_ID"
+  # Step 0: kill the foreground claude child explicitly so our `wait` below
+  # returns. Without this, a SIGTERM trap on the launcher would be queued
+  # behind a claude child that ignores/slowly responds to TERM, and bash
+  # could be SIGKILL'd before the trap body ever runs — leaking the
+  # workspace .claude/settings.json un-restored.
+  if [[ -n "${CLAUDE_PID:-}" ]]; then
+    kill -TERM "$CLAUDE_PID" 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+      kill -0 "$CLAUDE_PID" 2>/dev/null || break
+      sleep 0.2
+    done
+    kill -9 "$CLAUDE_PID" 2>/dev/null || true
+  fi
   # Step 1: SIGTERM tracked PIDs so they exit gracefully
   for pid in "${pids[@]}"; do
     kill "$pid" 2>/dev/null || true
@@ -155,10 +168,19 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# 9. Launch claude — NOT exec'd, so the trap above runs when claude exits
+# 9. Launch claude in the BACKGROUND so the trap can fire promptly on
+# SIGTERM/SIGINT. Running claude in the foreground means bash's signal
+# traps queue behind the child and may never fire before bash itself is
+# SIGKILL'd by an impatient parent (observed in a real dogfood run).
+# The trap's Step 0 (above) kills CLAUDE_PID so `wait` returns and the
+# rest of cleanup runs.
 echo ""
 echo "Launching claude with mission..."
 echo "---"
 cd "$WORKSPACE"
 PYTHONPATH="$REPO_ROOT" SESSION_ID="$SESSION_ID" SWARM_ROOT="$SWARM_ROOT" \
-  claude --session-id "$SESSION_ID" "$MISSION_PROSE"
+  claude --session-id "$SESSION_ID" "$MISSION_PROSE" &
+CLAUDE_PID=$!
+# `wait` is interruptible: a signal delivered to this shell returns from
+# wait with exit code 128+sig, which then triggers the TERM/INT/EXIT trap.
+wait "$CLAUDE_PID"
