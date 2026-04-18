@@ -35,6 +35,12 @@ from swarm.durable.activities import (
     InvariantsResult,
     TamperResult,
 )
+from swarm.durable.specialists import (
+    LLMCriticWorkflow,
+    PatternDetectorWorkflow,
+    ResourceMonitorWorkflow,
+)
+from swarm.durable.state import MissionState
 from swarm.durable.workflow import MissionWorkflow
 from swarm.schemas.mission import (
     Invariants,
@@ -250,19 +256,35 @@ async def _start_env() -> WorkflowEnvironment:
 
 async def _start_worker(env: WorkflowEnvironment, tq: str, activities: list):
     """Start a Worker on ``tq`` with the given activities and the
-    MissionWorkflow. Returns the Worker so the caller can manage its
-    lifecycle inside a context manager.
+    MissionWorkflow + the three observer stub child workflows. Returns
+    the Worker so the caller can manage its lifecycle inside a context
+    manager.
+
+    Task 14 added child-workflow registration: since ``MissionWorkflow``
+    now spawns three children on first launch, the worker must also
+    host those child workflows or ``start_child_workflow`` would hang
+    waiting for a worker that can run them. The stub bodies defined in
+    ``swarm.durable.specialists`` sleep forever, so registering them
+    here has zero runtime cost (they never get past their first
+    ``workflow.sleep``).
 
     ``workflow_runner`` uses the default sandbox; ``pydantic`` at module
     import time is allowed. If a future workflow imports non-deterministic
     code we'll have to pass ``workflow_runner=SandboxedWorkflowRunner(...)``
-    with a restrictions override. For Task 13 the defaults work because
-    ``swarm.durable.workflow`` imports only pydantic schemas (safe) and
-    ``retry_policies`` (pure)."""
+    with a restrictions override. For Task 13/14 the defaults work
+    because ``swarm.durable.workflow`` imports only pydantic schemas
+    (safe), ``retry_policies`` (pure), and the three specialist stub
+    workflows (pure).
+    """
     return Worker(
         env.client,
         task_queue=tq,
-        workflows=[MissionWorkflow],
+        workflows=[
+            MissionWorkflow,
+            PatternDetectorWorkflow,
+            LLMCriticWorkflow,
+            ResourceMonitorWorkflow,
+        ],
         activities=activities,
     )
 
@@ -636,3 +658,237 @@ def _make_always_failing_criterion():
         )
 
     return always_fail
+
+
+# --- Task 14 tests: child-workflow spawn + continue_as_new reconnect ---------
+#
+# The Task 14 additions are (a) spawning the three observer child workflows
+# on first launch, (b) skipping that spawn on continue_as_new resume, and
+# (c) triggering continue_as_new from the verifier loop — either via
+# Temporal's built-in heuristic (production) or via the test-only
+# ``force_continue_as_new`` signal (these tests).
+#
+# All tests use the stub child workflows from
+# ``swarm.durable.specialists`` — registered on the Worker by
+# ``_start_worker`` above. The stubs sleep forever; the tests query the
+# parent for ``child_workflow_ids`` and other state rather than querying
+# the children directly.
+#
+# NOTE on parent_close_policy=TERMINATE: the spec §6.2 line 152 contract
+# is that children are started with ``parent_close_policy=TERMINATE`` so
+# mission abort / completion tears down the whole tree. This is
+# structurally encoded in ``_start_children`` (grep shows one line per
+# child) and relies on Temporal's documented server-side semantics. We
+# deliberately do NOT add a behavioural test for "children are TERMINATED
+# after parent abort" because the time-skipping dev server does not
+# reliably propagate parent-close policies within the test window —
+# that behaviour is part of Temporal's own test suite and not ours to
+# re-verify. See also the superpowers:verification-before-completion
+# guidance on not testing framework-guaranteed semantics.
+
+
+@pytest.mark.asyncio
+async def test_first_launch_spawns_three_children(tmp_path):
+    """First launch (``carry=None``) must spawn the three observer children
+    and record their fixed IDs in ``child_workflow_ids``.
+
+    Asserts (a) the state dict has exactly the three expected keys, and
+    (b) the IDs follow the ``<parent_workflow_id>_<role>`` format — the
+    format spec §6.2 depends on for stable signal routing across
+    continue_as_new chains.
+    """
+    mission = _mission(tmp_path, run_every_sec=1, hold_window_sec=120)
+    tq = _task_queue()
+    parent_id = f"mission-{uuid.uuid4().hex}"
+
+    async with await _start_env() as env:
+        worker = await _start_worker(
+            env,
+            tq,
+            activities=[
+                mock_verify_tamper_clean,
+                mock_enforce_invariants_clean,
+                # Always-failing criterion so the workflow never reaches
+                # hold_window and never calls completion_judge — we only
+                # care that the first cycle ran once and child IDs got
+                # recorded.
+                _make_always_failing_criterion(),
+                mock_completion_judge_approve,
+                mock_emit_finding,
+            ],
+        )
+        async with worker:
+            handle = await env.client.start_workflow(
+                MissionWorkflow.run,
+                args=[mission],
+                id=parent_id,
+                task_queue=tq,
+            )
+
+            # Let the first verifier cycle run so child spawn completes
+            # and child_workflow_ids is populated.
+            await env.sleep(2)
+
+            status = await handle.query(MissionWorkflow.get_status)
+            ids = status.get("child_workflow_ids", {})
+
+            assert set(ids.keys()) == {
+                "pattern_detector",
+                "llm_critic",
+                "resource_monitor",
+            }, f"unexpected child role keys: {ids!r}"
+            assert ids["pattern_detector"] == f"{parent_id}_pattern_detector"
+            assert ids["llm_critic"] == f"{parent_id}_llm_critic"
+            assert ids["resource_monitor"] == f"{parent_id}_resource_monitor"
+
+            # Clean up — abort propagates to children via
+            # parent_close_policy=TERMINATE (a structural guarantee in
+            # ``_start_children``, not re-verified here).
+            await handle.signal(MissionWorkflow.abort, "test done")
+            await handle.result()
+
+
+@pytest.mark.asyncio
+async def test_continue_as_new_carries_state(tmp_path):
+    """Sending ``force_continue_as_new`` must (a) preserve child IDs,
+    (b) preserve criteria state across the cas, (c) keep the same
+    workflow_id (implied by the handle still working), and (d) NOT
+    spawn children a second time.
+
+    We detect "didn't spawn twice" by checking that the recorded
+    ``child_workflow_ids`` after resume still matches the originals —
+    if the resumed incarnation had called ``_start_children`` again it
+    would have raised ``WorkflowAlreadyStartedError`` (because the child
+    IDs are fixed) and the workflow would have failed. A successful
+    query after the cas is therefore sufficient evidence the spawn path
+    was not re-entered.
+    """
+    mission = _mission(tmp_path, run_every_sec=1, hold_window_sec=120)
+    tq = _task_queue()
+    parent_id = f"mission-{uuid.uuid4().hex}"
+
+    async with await _start_env() as env:
+        worker = await _start_worker(
+            env,
+            tq,
+            activities=[
+                mock_verify_tamper_clean,
+                mock_enforce_invariants_clean,
+                # Always-failing so we don't race with hold_window/completion.
+                _make_always_failing_criterion(),
+                mock_completion_judge_approve,
+                mock_emit_finding,
+            ],
+        )
+        async with worker:
+            handle = await env.client.start_workflow(
+                MissionWorkflow.run,
+                args=[mission],
+                id=parent_id,
+                task_queue=tq,
+            )
+
+            # Let first cycle complete so children spawn + criteria
+            # state populates.
+            await env.sleep(2)
+            pre_status = await handle.query(MissionWorkflow.get_status)
+            pre_ids = pre_status["child_workflow_ids"]
+            pre_criteria = pre_status["criteria_state"]
+            assert pre_ids, "child_workflow_ids should be populated pre-cas"
+            assert pre_criteria, "criteria_state should be populated pre-cas"
+
+            # Trigger cas on the next verifier cycle.
+            await handle.signal(MissionWorkflow.force_continue_as_new)
+
+            # Advance enough virtual time for the cas to fire and the
+            # resumed incarnation to complete at least one cycle.
+            await env.sleep(5)
+
+            post_status = await handle.query(MissionWorkflow.get_status)
+            post_ids = post_status["child_workflow_ids"]
+            post_criteria = post_status["criteria_state"]
+
+            # State preserved across cas.
+            assert post_ids == pre_ids, (
+                f"child_workflow_ids changed across cas: "
+                f"pre={pre_ids!r} post={post_ids!r}"
+            )
+            # Criteria state preserved (same set of criterion IDs; the
+            # per-criterion values are allowed to evolve since the
+            # verifier keeps checking after resume).
+            assert set(post_criteria.keys()) == set(pre_criteria.keys())
+            # Phase is still running (not terminal).
+            assert post_status["phase"] in {"running", "hold_window"}
+            # The force flag was cleared pre-cas so we don't cas in an
+            # infinite loop.
+            assert post_status.get("force_continue_as_new") is False
+
+            # Same workflow_id across the cas chain — the ``handle`` is
+            # bound to ``parent_id``; a query on it succeeding is direct
+            # evidence Temporal's stable-id contract held.
+
+            await handle.signal(MissionWorkflow.abort, "test done")
+            await handle.result()
+
+
+@pytest.mark.asyncio
+async def test_child_reconnect_on_resume_does_not_spawn_new(tmp_path):
+    """Starting the workflow WITH a non-empty ``carry`` must skip the
+    ``_start_children`` call — simulates the post-cas resume path.
+
+    We seed a ``MissionState`` with bogus ``child_workflow_ids`` (IDs
+    that do NOT correspond to real child workflows). The resume path in
+    ``run`` routes through ``_reconnect_children`` which preserves the
+    seeded dict verbatim. If ``_start_children`` had been called instead,
+    the IDs would have been overwritten with the ``<parent_id>_<role>``
+    format — catching the bug.
+    """
+    mission = _mission(tmp_path, run_every_sec=1, hold_window_sec=120)
+    tq = _task_queue()
+    parent_id = f"mission-{uuid.uuid4().hex}"
+
+    # Seed a MissionState with bogus child IDs — the post-cas resume
+    # path should preserve them verbatim.
+    bogus_ids = {
+        "pattern_detector": "legacy_pattern_detector_id",
+        "llm_critic": "legacy_llm_critic_id",
+        "resource_monitor": "legacy_resource_monitor_id",
+    }
+    seeded = MissionState(
+        phase="running",
+        child_workflow_ids=bogus_ids,
+    )
+
+    async with await _start_env() as env:
+        worker = await _start_worker(
+            env,
+            tq,
+            activities=[
+                mock_verify_tamper_clean,
+                mock_enforce_invariants_clean,
+                _make_always_failing_criterion(),
+                mock_completion_judge_approve,
+                mock_emit_finding,
+            ],
+        )
+        async with worker:
+            handle = await env.client.start_workflow(
+                MissionWorkflow.run,
+                args=[mission, seeded],
+                id=parent_id,
+                task_queue=tq,
+            )
+
+            await env.sleep(2)
+            status = await handle.query(MissionWorkflow.get_status)
+
+            # The resume path must preserve the seeded IDs exactly.
+            # If ``_start_children`` had been called the IDs would have
+            # been overwritten with the ``<parent_id>_<role>`` form.
+            assert status["child_workflow_ids"] == bogus_ids, (
+                "resume path overwrote child_workflow_ids — "
+                "implies _start_children was called on the resume path"
+            )
+
+            await handle.signal(MissionWorkflow.abort, "test done")
+            await handle.result()

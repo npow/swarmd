@@ -90,6 +90,16 @@ class MissionState(BaseModel):
     # Interventions that were issued but not yet acknowledged. The workflow
     # re-issues them after the ack timeout (120s per spec).
     pending_interventions: list[dict] = Field(default_factory=list)
+    # Test-only: when set by the ``force_continue_as_new`` signal, the
+    # verifier loop triggers ``continue_as_new`` on its next iteration
+    # without waiting for Temporal to hit the 50k-event / 50MB threshold
+    # that normally drives ``is_continue_as_new_suggested``. Production
+    # missions will never set this. Kept on the state (not an instance
+    # attr) so it also survives the very continue_as_new it triggers —
+    # but the trigger site clears it before calling ``continue_as_new``,
+    # so the resumed incarnation sees ``force_continue_as_new=False``
+    # which prevents an infinite cas loop.
+    force_continue_as_new: bool = False
 
     @classmethod
     def empty(cls) -> "MissionState":

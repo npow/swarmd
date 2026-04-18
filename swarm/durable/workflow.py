@@ -1,11 +1,12 @@
 """``MissionWorkflow`` — durable parent workflow per spec §6.2.
 
-Task 13 scope: **skeleton + verifier loop + signals + queries, first-launch
-only.** Task 14 will add ``continue_as_new`` with child-reconnection and
-child-workflow starts; until then, the workflow spawns no children and never
-triggers ``continue_as_new``. The ``_start_children`` stub below raises
-``NotImplementedError`` but is gated behind ``if not carry`` so Task 13 tests
-(which always pass ``carry=None``) never hit it.
+Task 13 delivered: skeleton + verifier loop + signals + queries.
+Task 14 (this file): ``continue_as_new`` history-bounding + child-workflow
+spawn on first launch + child-handle reconnect on resume, per spec §6.2
+lines 141-155. The ``carry`` parameter, previously threaded through as a
+no-op placeholder, is now the load-bearing signal that distinguishes
+first launch from resume: empty ``carry`` → spawn children; non-empty
+carry → re-acquire handles via ``get_external_workflow_handle``.
 
 The verifier loop implements the 4 numbered steps in spec §6.2 (lines
 107-139) exactly:
@@ -14,7 +15,7 @@ The verifier loop implements the 4 numbered steps in spec §6.2 (lines
     2. Invariant enforcement (``enforce_invariants``)
     3. Criterion checks in parallel (``check_criterion`` fan-out), then the
        pass-transition / hold-window / completion-judge decision tree.
-    4. History-bounding (``continue_as_new``) — STUB for Task 14.
+    4. History-bounding (``continue_as_new``) — implemented in Task 14.
 
 Determinism contract (spec §5):
 
@@ -49,8 +50,18 @@ from temporalio import workflow
 # they are deterministic and safe to import at workflow module top-level. If
 # any of these ever grow module-level side effects (DB lookups, network
 # calls, etc.) they must be wrapped in ``with workflow.unsafe.imports_passed_through():``.
+# ``specialists`` likewise only declares ``@workflow.defn`` classes (no I/O),
+# so it is safe to import inside the passthrough. Importing here (not inside
+# the method) keeps the import graph static, which Temporal's sandbox
+# prefers — dynamic imports from inside workflow methods are legal but
+# trigger a passthrough-cache miss every replay.
 with workflow.unsafe.imports_passed_through():
     from swarm.durable import retry_policies
+    from swarm.durable.specialists import (
+        LLMCriticWorkflow,
+        PatternDetectorWorkflow,
+        ResourceMonitorWorkflow,
+    )
     from swarm.durable.state import CriterionState, MissionState
     from swarm.schemas.mission import Mission
 
@@ -181,18 +192,22 @@ class MissionWorkflow:
         carry_state = _coerce_carry(carry)
 
         # Initialize state. Empty carry → first launch; non-empty carry →
-        # resumed from continue_as_new. Task 14 will populate carry.
-        self._state = carry_state if carry_state is not None else MissionState.empty()
-        if carry_state is None:
+        # resumed from continue_as_new. The ``carry_state is None`` branch
+        # is the ONLY place children are spawned — every subsequent
+        # incarnation in the continue_as_new chain must skip start_child
+        # or Temporal raises WorkflowAlreadyStartedError (spec §6.2 lines
+        # 145-148).
+        first_launch = carry_state is None
+        self._state = carry_state if not first_launch else MissionState.empty()
+        if first_launch:
             self._state.phase = "running"
-
-        # Task 14: start child workflows on first launch only. For Task 13
-        # we leave a gated stub so a misconfigured test can't silently enter
-        # a code path that would hang waiting for nonexistent children.
-        if carry_state is None:
-            # Reserved for Task 14 — do nothing in Task 13.
-            # self._start_children(mission)
-            pass
+            await self._start_children(mission)
+        else:
+            # Resumed — re-acquire child handles. No-op today (the handle
+            # is a local reference, not an RPC), but kept as a named seam
+            # so Task 15-17 rewrites can hook in here if they need to
+            # re-bind per-incarnation state.
+            await self._reconnect_children()
 
         # Main verifier loop. Exits only when the phase transitions into a
         # terminal state. ``aborting`` is a transient intermediary set by
@@ -215,11 +230,25 @@ class MissionWorkflow:
                 self._state.phase = "aborted"
                 break
 
-            # Task 14: history-bounding via continue_as_new.
-            # if workflow.info().is_continue_as_new_suggested():
-            #     workflow.continue_as_new(
-            #         self.run, args=[mission, self._state]
-            #     )
+            # Step 4 — History-bounding. Two trigger paths:
+            #   (a) Temporal's built-in heuristic (is_continue_as_new_suggested)
+            #       which fires when event count / history bytes cross
+            #       internal thresholds. Production path.
+            #   (b) The ``force_continue_as_new`` flag set by the
+            #       test-only ``force_continue_as_new`` signal. Lets tests
+            #       deterministically exercise the cas chain without
+            #       producing 50k events of history.
+            #
+            # The cas call NEVER returns (it raises ContinueAsNewError);
+            # control does not resume after the call.
+            if (
+                workflow.info().is_continue_as_new_suggested()
+                or self._state.force_continue_as_new
+            ):
+                # Clear the test flag so the next incarnation doesn't
+                # immediately cas again in an infinite loop.
+                self._state.force_continue_as_new = False
+                workflow.continue_as_new(args=[mission, self._state])
 
             await workflow.sleep(mission.verification.run_every_sec)
 
@@ -381,28 +410,102 @@ class MissionWorkflow:
                     )
                     self._state.findings_count += 1
 
-        # Step 4 — History-bounding. Task 14 will fill this in; for now
-        # we deliberately do nothing so the workflow history grows
-        # unbounded. At expected Task 13 test cadences (verifier_run_every
-        # = 1s, hold_window = 2s, durations < 30s) this is safe.
-        #
-        # Task 14:
-        #   if workflow.info().is_continue_as_new_suggested():
-        #       workflow.continue_as_new(
-        #           self.run, args=[mission, self._state]
-        #       )
+        # Step 4 — History-bounding runs AFTER the per-cycle work in
+        # ``run`` (not here), so ``_verifier_cycle`` stays focused on
+        # steps 1-3. See ``run`` for the continue_as_new call.
 
-    # ------------------------------------------------------------ task 14 stub
+    # ------------------------------------------------------------ child workflows
 
-    def _start_children(self, mission: Mission) -> None:
-        """Start the three observer child workflows on first launch.
+    async def _start_children(self, mission: Mission) -> None:
+        """Start the three observer child workflows per spec §6.2 lines 156-180.
 
-        Reserved for Task 14. This body must not execute in Task 13 — it is
-        gated behind ``if not carry`` in ``run`` where ``carry`` is always
-        ``None`` for first launch. The explicit ``NotImplementedError`` is a
-        defence against accidental invocation during test-time refactoring.
+        Called exactly once per mission — from ``run`` on the first launch
+        (when ``carry`` is ``None``). Post continue_as_new the parent
+        re-acquires handles via ``_reconnect_children`` instead; calling
+        ``start_child_workflow`` a second time would raise
+        ``WorkflowAlreadyStartedError`` because the child IDs are fixed.
+
+        Child IDs are derived deterministically from the parent's
+        ``workflow_id``. Temporal guarantees the parent's ``workflow_id``
+        is stable across the continue_as_new chain, so children stay
+        reachable by ID across parent restarts — this is the mechanism
+        spec §6.2 relies on for signal routing.
+
+        ``parent_close_policy=TERMINATE`` ensures mission abort /
+        completion tears down the full tree; otherwise children would
+        orphan.
         """
-        raise NotImplementedError("reserved for Task 14")
+        mid = workflow.info().workflow_id
+        observer = mission.observer_config
+        # session_id: Mission schema doesn't currently carry one, so we
+        # use the parent's workflow_id as a stable identifier. Once the
+        # schema grows a ``session_id`` field (or the launcher passes one
+        # through), swap this for the explicit value. Behaviour stays
+        # identical because Tasks 15-17 use session_id only for
+        # events.jsonl path resolution, and that derivation is consistent
+        # with workflow_id today.
+        session_id = mid
+
+        # Cadence defaults come from spec §6.2 and live on ``ObserverConfig``
+        # with defaults (10/120/30). We use ``getattr`` with an explicit
+        # default here rather than direct attribute access so the code
+        # stays robust if ``Mission`` was constructed with an older
+        # ``ObserverConfig`` that predates Task 3's cadence fields — pydantic
+        # serialization round-trips through dict form can end up with a
+        # model instance where the new fields simply don't appear. This is
+        # defence-in-depth; production ObserverConfig has the fields.
+        pd_sec = getattr(observer, "pattern_detector_sec", 10)
+        lc_sec = getattr(observer, "llm_critic_sec", 120)
+        rm_sec = getattr(observer, "resource_monitor_sec", 30)
+
+        # Start each child with its spec-defined cadence default (overridable
+        # via mission.yaml observer_config). Await each start sequentially
+        # so the workflow history has a predictable event order; parallel
+        # ``asyncio.gather`` would also be legal but complicates failure
+        # diagnosis if one of the three starts ever throws.
+        await workflow.start_child_workflow(
+            PatternDetectorWorkflow.run,
+            args=[mid, session_id, pd_sec],
+            id=f"{mid}_pattern_detector",
+            parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
+        )
+        await workflow.start_child_workflow(
+            LLMCriticWorkflow.run,
+            args=[mid, session_id, lc_sec],
+            id=f"{mid}_llm_critic",
+            parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
+        )
+        await workflow.start_child_workflow(
+            ResourceMonitorWorkflow.run,
+            args=[mid, session_id, rm_sec],
+            id=f"{mid}_resource_monitor",
+            parent_close_policy=workflow.ParentClosePolicy.TERMINATE,
+        )
+
+        # Record the IDs in durable state so they survive continue_as_new
+        # (the resumed incarnation reads these to re-acquire handles).
+        self._state.child_workflow_ids = {
+            "pattern_detector": f"{mid}_pattern_detector",
+            "llm_critic": f"{mid}_llm_critic",
+            "resource_monitor": f"{mid}_resource_monitor",
+        }
+
+    async def _reconnect_children(self) -> None:
+        """Re-acquire handles to the three child workflows post continue_as_new.
+
+        No-op in Task 14: ``workflow.get_external_workflow_handle(id)`` is
+        a cheap local reference (not an RPC), so we don't need to eagerly
+        call it here — the signal senders in the intervention flow
+        (future task) will call it at dispatch time. Kept as a named seam
+        so (a) the code path is obvious when reading ``run``, and (b)
+        Tasks 15-17 can hook per-incarnation setup here without touching
+        ``run`` itself.
+
+        The ``child_workflow_ids`` dict carried over from the previous
+        incarnation is already correct — no mutation needed.
+        """
+        # Intentionally empty. See docstring for rationale.
+        return None
 
     # ----------------------------------------------------------- state helpers
 
@@ -490,6 +593,23 @@ class MissionWorkflow:
         self._pending_signal_work.append(
             {"kind": "intervention", "payload": action}
         )
+
+    @workflow.signal
+    async def force_continue_as_new(self) -> None:
+        """TEST-ONLY: request a deterministic ``continue_as_new`` on next cycle.
+
+        Production code should never send this signal. It exists so tests
+        can exercise the cas chain without generating the 50k events /
+        50MB of history that Temporal's
+        ``is_continue_as_new_suggested`` heuristic normally needs.
+
+        The flag lives on ``MissionState`` (not on ``self``) so it
+        survives the very cas it triggers — but the trigger site clears
+        it before calling ``continue_as_new``, so the resumed incarnation
+        sees ``force_continue_as_new=False`` which prevents an infinite
+        cas loop.
+        """
+        self._state.force_continue_as_new = True
 
     # ----------------------------------------------------------------- queries
 
