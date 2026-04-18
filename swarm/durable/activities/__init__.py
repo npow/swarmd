@@ -87,6 +87,14 @@ from swarm.durable.activities.detect_scope_shrinking import (
     detect_scope_shrinking as detect_scope_shrinking_activity,
 )
 
+# Task 15 — ``read_recent_events`` for the PatternDetectorWorkflow to tail
+# ``events.jsonl``. Aliased (``_activity`` suffix) so the re-export doesn't
+# shadow the submodule at attribute lookup time — same pitfall rationale
+# as the other aliased activities above.
+from swarm.durable.activities.read_recent_events import (
+    read_recent_events as read_recent_events_activity,
+)
+
 __all__ = [
     "AnticheatVerdict",
     "ClaudeResult",
@@ -109,6 +117,7 @@ __all__ = [
     "goal_drift_check_activity",
     "intervention_judge_activity",
     "progress_audit_activity",
+    "read_recent_events_activity",
     "restart_subprocess_activity",
     "run_anticheat_dimension_activity",
     "run_claude_cli_activity",
