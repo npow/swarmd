@@ -39,6 +39,14 @@ from swarm.durable.activities.completion_judge import (
     CompletionDecision,
     completion_judge as completion_judge_activity,
 )
+from swarm.durable.activities.progress_audit import (
+    ProgressAuditResult,
+    progress_audit as progress_audit_activity,
+)
+from swarm.durable.activities.goal_drift_check import (
+    GoalDriftResult,
+    goal_drift_check as goal_drift_check_activity,
+)
 
 # ``emit_finding`` is re-exported under an alias so it does not shadow the
 # ``swarm.durable.activities.emit_finding`` submodule at attribute lookup
@@ -62,14 +70,18 @@ __all__ = [
     "CompletionDecision",
     "CriterionCheckResult",
     "ESCAPE_LADDER",
+    "GoalDriftResult",
     "InterventionDecision",
     "InvariantsResult",
+    "ProgressAuditResult",
     "TamperResult",
     "check_criterion",
     "completion_judge_activity",
     "emit_finding_activity",
     "enforce_invariants",
+    "goal_drift_check_activity",
     "intervention_judge_activity",
+    "progress_audit_activity",
     "run_claude_cli_activity",
     "verify_tamper",
 ]
