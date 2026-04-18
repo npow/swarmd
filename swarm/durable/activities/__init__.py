@@ -47,6 +47,10 @@ from swarm.durable.activities.goal_drift_check import (
     GoalDriftResult,
     goal_drift_check as goal_drift_check_activity,
 )
+from swarm.durable.activities.run_anticheat_dimension import (
+    AnticheatVerdict,
+    run_anticheat_dimension as run_anticheat_dimension_activity,
+)
 
 # ``emit_finding`` is re-exported under an alias so it does not shadow the
 # ``swarm.durable.activities.emit_finding`` submodule at attribute lookup
@@ -66,6 +70,7 @@ from swarm.durable.activities.run_claude_cli import (
 )
 
 __all__ = [
+    "AnticheatVerdict",
     "ClaudeResult",
     "CompletionDecision",
     "CriterionCheckResult",
@@ -82,6 +87,7 @@ __all__ = [
     "goal_drift_check_activity",
     "intervention_judge_activity",
     "progress_audit_activity",
+    "run_anticheat_dimension_activity",
     "run_claude_cli_activity",
     "verify_tamper",
 ]
