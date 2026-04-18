@@ -95,6 +95,15 @@ from swarm.durable.activities.read_recent_events import (
     read_recent_events as read_recent_events_activity,
 )
 
+# Task 17 — zombie / memory / disk checks for the ResourceMonitorWorkflow.
+# All three live in one module because they're small and always used
+# together; they share the same ``_activity`` alias pattern.
+from swarm.durable.activities.check_resources import (
+    check_disk as check_disk_activity,
+    check_memory as check_memory_activity,
+    check_zombies as check_zombies_activity,
+)
+
 __all__ = [
     "AnticheatVerdict",
     "ClaudeResult",
@@ -110,6 +119,9 @@ __all__ = [
     "SpawnResult",
     "TamperResult",
     "check_criterion",
+    "check_disk_activity",
+    "check_memory_activity",
+    "check_zombies_activity",
     "completion_judge_activity",
     "detect_scope_shrinking_activity",
     "emit_finding_activity",
