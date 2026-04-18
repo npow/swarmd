@@ -69,6 +69,24 @@ from swarm.durable.activities.run_claude_cli import (
     run_claude_cli as run_claude_cli_activity,
 )
 
+# Task 12 — spawn_subagent / restart_subprocess / detect_scope_shrinking.
+# Same alias-suffix pattern as the judges above, for the same reason:
+# avoid shadowing the submodule at attribute lookup time (keeps
+# ``patch("swarm.durable.activities.spawn_subagent._launch_claude_subprocess")``
+# and similar monkeypatches working correctly).
+from swarm.durable.activities.spawn_subagent import (
+    SpawnResult,
+    spawn_subagent as spawn_subagent_activity,
+)
+from swarm.durable.activities.restart_subprocess import (
+    RestartResult,
+    restart_subprocess as restart_subprocess_activity,
+)
+from swarm.durable.activities.detect_scope_shrinking import (
+    ScopeShrinkingResult,
+    detect_scope_shrinking as detect_scope_shrinking_activity,
+)
+
 __all__ = [
     "AnticheatVerdict",
     "ClaudeResult",
@@ -79,15 +97,21 @@ __all__ = [
     "InterventionDecision",
     "InvariantsResult",
     "ProgressAuditResult",
+    "RestartResult",
+    "ScopeShrinkingResult",
+    "SpawnResult",
     "TamperResult",
     "check_criterion",
     "completion_judge_activity",
+    "detect_scope_shrinking_activity",
     "emit_finding_activity",
     "enforce_invariants",
     "goal_drift_check_activity",
     "intervention_judge_activity",
     "progress_audit_activity",
+    "restart_subprocess_activity",
     "run_anticheat_dimension_activity",
     "run_claude_cli_activity",
+    "spawn_subagent_activity",
     "verify_tamper",
 ]
