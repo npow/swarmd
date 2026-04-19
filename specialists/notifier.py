@@ -11,17 +11,17 @@ import os
 import sys
 import time
 
-from swarm.lib.heartbeat import beat
-from swarm.lib.launcher_liveness import exit_if_launcher_dead
-from swarm.lib.notify_os import notify as default_notify
-from swarm.lib.paths import (
+from swarmd.lib.heartbeat import beat
+from swarmd.lib.launcher_liveness import exit_if_launcher_dead
+from swarmd.lib.notify_os import notify as default_notify
+from swarmd.lib.paths import (
     ensure_session_dirs,
     findings_path,
     interventions_path,
     session_dir,
 )
-from swarm.schemas.finding import Finding
-from swarm.schemas.intervention import Intervention
+from swarmd.schemas.finding import Finding
+from swarmd.schemas.intervention import Intervention
 
 LOG = logging.getLogger("swarm.notifier")
 

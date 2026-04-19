@@ -130,7 +130,7 @@ def runner() -> CliRunner:
 @pytest.fixture
 def cli_module():
     """Import the CLI lazily so test collection doesn't pay for anthropic."""
-    from swarm import cli as cli_mod
+    from swarmd import cli as cli_mod
 
     return cli_mod
 
@@ -152,7 +152,7 @@ class TestLaunchHappyPath:
         mock_client = _make_mock_temporal_client(pollers=1)
 
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = runner.invoke(cli_module.cli, ["launch", str(mission_path)])
@@ -178,7 +178,7 @@ class TestLaunchInvalidYaml:
         # but patch connect so a bug that reaches it would loudly fail
         # rather than pass silently.
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(side_effect=AssertionError("should not connect")),
         ):
             result = runner.invoke(cli_module.cli, ["launch", str(mission_path)])
@@ -198,7 +198,7 @@ class TestLaunchTemporalUnreachable:
         mission_path = _write_mission_file(tmp_path, ws)
 
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(side_effect=OSError("connection refused")),
         ):
             result = runner.invoke(cli_module.cli, ["launch", str(mission_path)])
@@ -219,7 +219,7 @@ class TestLaunchNoWorker:
         mock_client = _make_mock_temporal_client(pollers=0)
 
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = runner.invoke(cli_module.cli, ["launch", str(mission_path)])
@@ -244,7 +244,7 @@ class TestLaunchWorkspaceLocked:
         mock_client = _make_mock_temporal_client(pollers=1)
 
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = runner.invoke(cli_module.cli, ["launch", str(mission_path)])
@@ -269,7 +269,7 @@ class TestStatusHappyPath:
         mock_client = _make_mock_temporal_client(query_result=expected)
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = runner.invoke(
@@ -290,7 +290,7 @@ class TestStatusNotFound:
         )
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = runner.invoke(
@@ -312,7 +312,7 @@ class TestAbortDefaultReason:
         mock_client = _make_mock_temporal_client()
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = runner.invoke(cli_module.cli, ["abort", "mission-abc"])
@@ -329,7 +329,7 @@ class TestAbortCustomReason:
         mock_client = _make_mock_temporal_client()
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = runner.invoke(
@@ -353,7 +353,7 @@ class TestWorkerCommand:
         # ``main`` is an async def; the CLI does ``asyncio.run(main())``.
         # We replace it with an AsyncMock so the runner doesn't actually
         # launch a worker.
-        with patch("swarm.durable.worker.main", AsyncMock()) as mock_main:
+        with patch("swarmd.durable.worker.main", AsyncMock()) as mock_main:
             result = runner.invoke(cli_module.cli, ["worker"])
 
         assert result.exit_code == 0, result.output + (result.stderr or "")
@@ -379,7 +379,7 @@ class TestHealthAllPass:
         mock_anthropic_ctor = MagicMock(return_value=mock_anthropic_instance)
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(return_value=mock_client),
         ), patch("anthropic.Anthropic", mock_anthropic_ctor):
             result = runner.invoke(cli_module.cli, ["health"])
@@ -399,7 +399,7 @@ class TestHealthTemporalFail:
         mock_anthropic_ctor = MagicMock(return_value=mock_anthropic_instance)
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(side_effect=OSError("connection refused")),
         ), patch("anthropic.Anthropic", mock_anthropic_ctor):
             result = runner.invoke(cli_module.cli, ["health"])
@@ -431,7 +431,7 @@ class TestHealthWorkerFail:
         mock_anthropic_ctor = MagicMock(return_value=mock_anthropic_instance)
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(return_value=mock_client),
         ), patch("anthropic.Anthropic", mock_anthropic_ctor):
             result = runner.invoke(cli_module.cli, ["health"])
@@ -467,7 +467,7 @@ class TestFindingsNoSession:
         # Make the status-query branch fail so the resolver falls back
         # to ~/.swarm/state/<id>/findings.jsonl, which doesn't exist.
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(side_effect=OSError("no temporal")),
         ):
             result = runner.invoke(
@@ -506,7 +506,7 @@ class TestFindingsWithTail:
                 )
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(side_effect=OSError("no temporal")),
         ):
             result = runner.invoke(
@@ -537,7 +537,7 @@ class TestLogsNoFile:
         monkeypatch.setenv("HOME", str(tmp_path))
 
         with patch(
-            "swarm.cli.Client.connect",
+            "swarmd.cli.Client.connect",
             AsyncMock(side_effect=OSError("no temporal")),
         ):
             result = runner.invoke(

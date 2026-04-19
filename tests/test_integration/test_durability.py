@@ -61,19 +61,19 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 from temporalio.worker import Worker
 
-from swarm.durable.activities import (
+from swarmd.durable.activities import (
     CompletionDecision,
     CriterionCheckResult,
     InvariantsResult,
     TamperResult,
 )
-from swarm.durable.specialists import (
+from swarmd.durable.specialists import (
     LLMCriticWorkflow,
     PatternDetectorWorkflow,
     ResourceMonitorWorkflow,
 )
-from swarm.durable.workflow import MissionWorkflow
-from swarm.schemas.mission import (
+from swarmd.durable.workflow import MissionWorkflow
+from swarmd.schemas.mission import (
     Invariants,
     Mission,
     SuccessCriterion,

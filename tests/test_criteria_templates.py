@@ -39,7 +39,7 @@ def _dummy_paths(tmp_path: Path):
 
 
 def test_detect_code_from_spec(tmp_path):
-    from swarm.lib.criteria_templates import detect_task_type
+    from swarmd.lib.criteria_templates import detect_task_type
 
     spec = _write_spec(
         tmp_path,
@@ -50,7 +50,7 @@ def test_detect_code_from_spec(tmp_path):
 
 
 def test_detect_doc_from_spec(tmp_path):
-    from swarm.lib.criteria_templates import detect_task_type
+    from swarmd.lib.criteria_templates import detect_task_type
 
     spec = _write_spec(
         tmp_path,
@@ -62,7 +62,7 @@ def test_detect_doc_from_spec(tmp_path):
 
 
 def test_detect_research_from_spec(tmp_path):
-    from swarm.lib.criteria_templates import detect_task_type
+    from swarmd.lib.criteria_templates import detect_task_type
 
     spec = _write_spec(
         tmp_path,
@@ -73,7 +73,7 @@ def test_detect_research_from_spec(tmp_path):
 
 
 def test_detect_skill_from_spec(tmp_path):
-    from swarm.lib.criteria_templates import detect_task_type
+    from swarmd.lib.criteria_templates import detect_task_type
 
     spec = _write_spec(
         tmp_path,
@@ -85,7 +85,7 @@ def test_detect_skill_from_spec(tmp_path):
 
 
 def test_detect_exploration_from_spec(tmp_path):
-    from swarm.lib.criteria_templates import detect_task_type
+    from swarmd.lib.criteria_templates import detect_task_type
 
     spec = _write_spec(
         tmp_path,
@@ -101,7 +101,7 @@ def test_detect_exploration_from_spec(tmp_path):
 
 
 def test_get_criteria_code_returns_pytest_criterion(tmp_path):
-    from swarm.lib.criteria_templates import get_criteria
+    from swarmd.lib.criteria_templates import get_criteria
 
     workspace, spec, design, plan = _dummy_paths(tmp_path)
     criteria = get_criteria("code", workspace, spec=spec, design=design, plan=plan)
@@ -110,7 +110,7 @@ def test_get_criteria_code_returns_pytest_criterion(tmp_path):
 
 
 def test_get_criteria_doc_references_deep_qa_cli(tmp_path):
-    from swarm.lib.criteria_templates import get_criteria
+    from swarmd.lib.criteria_templates import get_criteria
 
     workspace, spec, design, plan = _dummy_paths(tmp_path)
     criteria = get_criteria("doc", workspace, spec=spec, design=design, plan=plan)
@@ -121,7 +121,7 @@ def test_get_criteria_doc_references_deep_qa_cli(tmp_path):
 
 
 def test_all_criteria_have_required_fields(tmp_path):
-    from swarm.lib.criteria_templates import TaskType, get_criteria
+    from swarmd.lib.criteria_templates import TaskType, get_criteria
 
     workspace, spec, design, plan = _dummy_paths(tmp_path)
     required = {"id", "description", "check", "timeout_sec", "idempotent"}
@@ -138,7 +138,7 @@ def test_all_criteria_have_required_fields(tmp_path):
 
 def test_check_commands_are_bash_syntactically_valid(tmp_path):
     """Every check string must parse cleanly under `bash -n`."""
-    from swarm.lib.criteria_templates import TaskType, get_criteria
+    from swarmd.lib.criteria_templates import TaskType, get_criteria
 
     workspace, spec, design, plan = _dummy_paths(tmp_path)
     task_types: list[TaskType] = ["code", "doc", "research", "exploration", "skill"]

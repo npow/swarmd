@@ -16,7 +16,7 @@ that reword but preserve the invariants should still pass.
 
 from __future__ import annotations
 
-from swarm.mcp.prompts import PROPOSE_CRITERIA_PROMPT
+from swarmd.mcp.prompts import PROPOSE_CRITERIA_PROMPT
 
 
 class TestProposeCriteriaPromptShape:

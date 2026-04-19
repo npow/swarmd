@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 
-from swarm.lib.locking import write_line
-from swarm.lib.paths import findings_path, session_dir
-from swarm.schemas.finding import Finding
-from swarm.specialists.completion_judge import judge
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import findings_path, session_dir
+from swarmd.schemas.finding import Finding
+from swarmd.specialists.completion_judge import judge
 
 
 def _write_verifier_status(session_id: str, all_pass: bool) -> None:

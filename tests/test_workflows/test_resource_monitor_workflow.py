@@ -21,7 +21,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
-from swarm.durable.specialists import ResourceMonitorWorkflow
+from swarmd.durable.specialists import ResourceMonitorWorkflow
 
 
 _received_findings: dict[str, list[dict[str, Any]]] = {}

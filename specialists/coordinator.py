@@ -15,17 +15,17 @@ import time
 
 import yaml
 
-from swarm.lib.heartbeat import beat
-from swarm.lib.ids import mint_intervention_id
-from swarm.lib.interventions import (
+from swarmd.lib.heartbeat import beat
+from swarmd.lib.ids import mint_intervention_id
+from swarmd.lib.interventions import (
     intervention_age_sec,
 )
-from swarm.lib.launcher_liveness import exit_if_launcher_dead
-from swarm.lib.interventions import (
+from swarmd.lib.launcher_liveness import exit_if_launcher_dead
+from swarmd.lib.interventions import (
     read_all as read_all_interventions,
 )
-from swarm.lib.locking import locked_rmw, write_line
-from swarm.lib.paths import (
+from swarmd.lib.locking import locked_rmw, write_line
+from swarmd.lib.paths import (
     ensure_session_dirs,
     findings_path,
     interventions_path,
@@ -33,12 +33,12 @@ from swarm.lib.paths import (
     strikes_path,
     tried_strategies_path,
 )
-from swarm.schemas.finding import Finding
-from swarm.schemas.intervention import Intervention
-from swarm.schemas.mission import Mission
-from swarm.specialists.anticheat_critic_panel import run_panel as anticheat_run_panel
-from swarm.specialists.completion_judge import judge as completion_judge
-from swarm.specialists.intervention_judge import decide as judge_decide
+from swarmd.schemas.finding import Finding
+from swarmd.schemas.intervention import Intervention
+from swarmd.schemas.mission import Mission
+from swarmd.specialists.anticheat_critic_panel import run_panel as anticheat_run_panel
+from swarmd.specialists.completion_judge import judge as completion_judge
+from swarmd.specialists.intervention_judge import decide as judge_decide
 
 LOG = logging.getLogger("swarm.coordinator")
 
@@ -287,7 +287,7 @@ def _reissue_stale(session_id: str, reissued_ids: set[str]) -> int:
     The copy gets a fresh id so the hook will pick it up as new. The original
     intervention's id is recorded in `reissued_ids` so we don't reissue it twice.
     """
-    from swarm.lib.interventions import _acked_ids  # internal — same package
+    from swarmd.lib.interventions import _acked_ids  # internal — same package
 
     n = 0
     acked = _acked_ids(session_id)

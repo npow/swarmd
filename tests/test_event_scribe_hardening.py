@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from swarm.specialists.event_scribe import MAX_DETAIL_BYTES, emit_event, redact
+from swarmd.specialists.event_scribe import MAX_DETAIL_BYTES, emit_event, redact
 
 
 def test_redact_aws_key():

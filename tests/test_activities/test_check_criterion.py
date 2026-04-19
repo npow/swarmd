@@ -17,11 +17,11 @@ from __future__ import annotations
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.check_criterion import (
+from swarmd.durable.activities.check_criterion import (
     CriterionCheckResult,
     check_criterion,
 )
-from swarm.schemas.criterion import Criterion
+from swarmd.schemas.criterion import Criterion
 
 
 @pytest.mark.asyncio

@@ -12,10 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from swarm.lib.interventions import ack as ack_intervention  # noqa: E402
-from swarm.lib.interventions import read_pending  # noqa: E402
-from swarm.lib.paths import ensure_session_dirs  # noqa: E402
-from swarm.specialists.event_scribe import emit_event  # noqa: E402
+from swarmd.lib.interventions import ack as ack_intervention  # noqa: E402
+from swarmd.lib.interventions import read_pending  # noqa: E402
+from swarmd.lib.paths import ensure_session_dirs  # noqa: E402
+from swarmd.specialists.event_scribe import emit_event  # noqa: E402
 
 
 def _summarize_input(d: object, tool_name: str | None) -> str | None:
@@ -79,7 +79,7 @@ OBSERVER_BRIEF_EVERY = 10
 
 
 def _bump_brief_counter(session_id: str) -> int:
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     p = session_dir(session_id) / "tool_call_count.txt"
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -94,8 +94,8 @@ def _bump_brief_counter(session_id: str) -> int:
 
 def _observer_brief(session_id: str) -> str | None:
     """Compact summary of recent finding types + strike count for the worker."""
-    from swarm.lib.paths import findings_path, strikes_path
-    from swarm.schemas.finding import Finding
+    from swarmd.lib.paths import findings_path, strikes_path
+    from swarmd.schemas.finding import Finding
 
     fp = findings_path(session_id)
     sp = strikes_path(session_id)

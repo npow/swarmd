@@ -47,12 +47,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.run_anticheat_dimension import (
+from swarmd.durable.activities.run_anticheat_dimension import (
     AnticheatVerdict,
     _DIMENSION_PROMPTS,
     run_anticheat_dimension,
 )
-from swarm.durable.errors import TerminalError, TransientError
+from swarmd.durable.errors import TerminalError, TransientError
 
 
 _ALL_DIMENSIONS = [
@@ -106,7 +106,7 @@ async def test_happy_path_pass_per_dimension(dimension):
         )
     )
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -147,7 +147,7 @@ async def test_fail_verdict_produces_anticheat_fail_finding(dimension):
         )
     )
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -180,7 +180,7 @@ async def test_suspicious_verdict_produces_anticheat_suspicious_finding(
         )
     )
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -218,7 +218,7 @@ async def test_missing_context_key_raises_terminal():
     del ctx["check_command"]  # drop one required placeholder
     mock_invoke = AsyncMock(return_value=json.dumps({"verdict": "pass"}))
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -237,7 +237,7 @@ async def test_malformed_json_raises_terminal():
     """
     mock_invoke = AsyncMock(return_value="not json at all <<<>>>")
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -259,7 +259,7 @@ async def test_transient_invoke_error_raises_transient():
         side_effect=TransientError("gateway LLM error: network hiccup")
     )
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -281,7 +281,7 @@ async def test_unknown_verdict_string_raises_terminal():
         )
     )
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -309,7 +309,7 @@ async def test_context_placeholders_reach_prompt():
         return_value=json.dumps({"verdict": "pass", "rationale": "ok"})
     )
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -333,7 +333,7 @@ async def test_reviewer_receives_prompt_via_invoke_reviewer():
         return_value=json.dumps({"verdict": "pass", "rationale": "ok"})
     )
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -362,7 +362,7 @@ async def test_json_fences_are_stripped():
     )
     mock_invoke = AsyncMock(return_value=fenced)
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()
@@ -388,7 +388,7 @@ async def test_mission_metadata_passes_through_to_finding():
         return_value=json.dumps({"verdict": "fail", "rationale": "cheat"})
     )
     with patch(
-        "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
+        "swarmd.durable.activities.run_anticheat_dimension._invoke_reviewer",
         mock_invoke,
     ):
         env = ActivityEnvironment()

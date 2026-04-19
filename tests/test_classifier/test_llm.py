@@ -18,9 +18,9 @@ import httpx
 import pytest
 from anthropic import APIStatusError, AuthenticationError, RateLimitError
 
-from swarm.classifier.llm import classify_llm
-from swarm.classifier.rules import ClassifierResult, ClassifierVerdict
-from swarm.durable.errors import AuthError, TerminalError, TransientError
+from swarmd.classifier.llm import classify_llm
+from swarmd.classifier.rules import ClassifierResult, ClassifierVerdict
+from swarmd.durable.errors import AuthError, TerminalError, TransientError
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ class TestHappyPaths:
             reason="imperative verb on code",
         )
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("fix the flaky test")
 
@@ -79,7 +79,7 @@ class TestHappyPaths:
             reason="conceptual question",
         )
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("what is asyncio?")
 
@@ -94,7 +94,7 @@ class TestHappyPaths:
             reason="read-only query about mission",
         )
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("how is the mission going?")
 
@@ -109,7 +109,7 @@ class TestHappyPaths:
             reason="genuinely ambiguous",
         )
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("thoughts on this?")
 
@@ -127,7 +127,7 @@ class TestConfidenceClamping:
     async def test_confidence_clamped_to_one(self):
         raw = _json_response(verdict="mission", confidence=1.5, reason="x")
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("fix X")
         assert result.confidence == 1.0
@@ -135,7 +135,7 @@ class TestConfidenceClamping:
     async def test_confidence_clamped_to_zero(self):
         raw = _json_response(verdict="mission", confidence=-0.5, reason="x")
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("fix X")
         assert result.confidence == 0.0
@@ -146,7 +146,7 @@ class TestConfidenceClamping:
             {"verdict": "chat", "confidence": 1, "reason": "x"}
         )
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("hi")
         assert result.confidence == 1.0
@@ -161,7 +161,7 @@ class TestReasonField:
     async def test_missing_reason_uses_placeholder(self):
         raw = json.dumps({"verdict": "mission", "confidence": 0.8})
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("fix X")
         assert result.reason == "(no reason provided)"
@@ -172,7 +172,7 @@ class TestReasonField:
             verdict="mission", confidence=0.8, reason=long_reason
         )
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("fix X")
         assert len(result.reason) == 500
@@ -180,7 +180,7 @@ class TestReasonField:
     async def test_empty_reason_uses_placeholder(self):
         raw = _json_response(verdict="mission", confidence=0.8, reason="   ")
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("fix X")
         assert result.reason == "(no reason provided)"
@@ -197,7 +197,7 @@ class TestJsonParsing:
         payload = _json_response(verdict="mission", confidence=0.7, reason="x")
         fenced = f"```json\n{payload}\n```"
         with patch(
-            "swarm.classifier.llm._invoke_haiku",
+            "swarmd.classifier.llm._invoke_haiku",
             AsyncMock(return_value=fenced),
         ):
             result = await classify_llm("fix X")
@@ -209,7 +209,7 @@ class TestJsonParsing:
         payload = _json_response(verdict="chat", confidence=0.8, reason="x")
         fenced = f"```\n{payload}\n```"
         with patch(
-            "swarm.classifier.llm._invoke_haiku",
+            "swarmd.classifier.llm._invoke_haiku",
             AsyncMock(return_value=fenced),
         ):
             result = await classify_llm("hi")
@@ -221,7 +221,7 @@ class TestJsonParsing:
             verdict="yes_do_it", confidence=0.9, reason="whatever"
         )
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             with pytest.raises(TerminalError):
                 await classify_llm("fix X")
@@ -229,7 +229,7 @@ class TestJsonParsing:
     async def test_malformed_json_raises_terminal(self):
         """Plain prose → TerminalError. Retries won't turn prose into JSON."""
         with patch(
-            "swarm.classifier.llm._invoke_haiku",
+            "swarmd.classifier.llm._invoke_haiku",
             AsyncMock(return_value="I think this is a mission"),
         ):
             with pytest.raises(TerminalError):
@@ -237,7 +237,7 @@ class TestJsonParsing:
 
     async def test_empty_response_raises_terminal(self):
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value="")
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value="")
         ):
             with pytest.raises(TerminalError):
                 await classify_llm("fix X")
@@ -249,7 +249,7 @@ class TestJsonParsing:
             {"verdict": "MISSION", "confidence": 0.8, "reason": "x"}
         )
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(return_value=raw)
         ):
             result = await classify_llm("fix X")
         assert result.verdict == ClassifierVerdict.MISSION
@@ -268,7 +268,7 @@ class TestHttpErrors:
             401, cls=AuthenticationError
         )
         mock_ctor = MagicMock(return_value=mock_client)
-        with patch("swarm.classifier.llm.Anthropic", mock_ctor):
+        with patch("swarmd.classifier.llm.Anthropic", mock_ctor):
             with pytest.raises(AuthError):
                 await classify_llm("fix X")
 
@@ -279,7 +279,7 @@ class TestHttpErrors:
             429, cls=RateLimitError
         )
         mock_ctor = MagicMock(return_value=mock_client)
-        with patch("swarm.classifier.llm.Anthropic", mock_ctor):
+        with patch("swarmd.classifier.llm.Anthropic", mock_ctor):
             with pytest.raises(TransientError):
                 await classify_llm("fix X")
 
@@ -288,7 +288,7 @@ class TestHttpErrors:
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = _make_api_status_error(424)
         mock_ctor = MagicMock(return_value=mock_client)
-        with patch("swarm.classifier.llm.Anthropic", mock_ctor):
+        with patch("swarmd.classifier.llm.Anthropic", mock_ctor):
             with pytest.raises(TransientError):
                 await classify_llm("fix X")
 
@@ -305,7 +305,7 @@ class TestTimeout:
         We shrink the timeout to 0.05s so the test doesn't actually wait 10s.
         Per-test monkeypatch keeps the production constant intact.
         """
-        import swarm.classifier.llm as llm_mod
+        import swarmd.classifier.llm as llm_mod
 
         monkeypatch.setattr(llm_mod, "_TIMEOUT_SEC", 0.05)
 
@@ -314,7 +314,7 @@ class TestTimeout:
             return _json_response()
 
         with patch(
-            "swarm.classifier.llm._invoke_haiku", AsyncMock(side_effect=slow_invoke)
+            "swarmd.classifier.llm._invoke_haiku", AsyncMock(side_effect=slow_invoke)
         ):
             with pytest.raises(TransientError):
                 await classify_llm("fix X")
@@ -337,7 +337,7 @@ class TestPromptWiring:
             return raw
 
         with patch(
-            "swarm.classifier.llm._invoke_haiku",
+            "swarmd.classifier.llm._invoke_haiku",
             AsyncMock(side_effect=capturing_invoke),
         ):
             await classify_llm("fix the flaky test in test_auth.py")
@@ -356,7 +356,7 @@ class TestPromptWiring:
 
         context = {"cwd": "/tmp/project", "recent_file": "auth.py"}
         with patch(
-            "swarm.classifier.llm._invoke_haiku",
+            "swarmd.classifier.llm._invoke_haiku",
             AsyncMock(side_effect=capturing_invoke),
         ):
             await classify_llm("fix X", context=context)
@@ -376,7 +376,7 @@ class TestPromptWiring:
             return raw
 
         with patch(
-            "swarm.classifier.llm._invoke_haiku",
+            "swarmd.classifier.llm._invoke_haiku",
             AsyncMock(side_effect=capturing_invoke),
         ):
             await classify_llm("fix X", context=None)

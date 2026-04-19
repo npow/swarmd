@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from swarm.lint_criteria import Finding, lint_mission
+from swarmd.lint_criteria import Finding, lint_mission
 
 
 def _mission(**criteria_by_id) -> dict:

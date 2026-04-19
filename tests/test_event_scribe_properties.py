@@ -11,7 +11,7 @@ from __future__ import annotations
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from swarm.specialists.event_scribe import (
+from swarmd.specialists.event_scribe import (
     MAX_DETAIL_BYTES,
     emit_event,
     read_events,
@@ -23,7 +23,7 @@ def _fresh_session(monkeypatch, tmp_path_factory) -> str:
     """Build an isolated swarm_root + session for one hypothesis example."""
     import uuid as _uuid
 
-    from swarm.lib.paths import _reset_for_tests, ensure_session_dirs
+    from swarmd.lib.paths import _reset_for_tests, ensure_session_dirs
 
     root = tmp_path_factory.mktemp(f"hs-{_uuid.uuid4().hex[:8]}")
     monkeypatch.setenv("SWARM_ROOT", str(root))

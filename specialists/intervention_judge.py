@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from swarm.schemas.finding import Finding
+from swarmd.schemas.finding import Finding
 
 
 @dataclass(frozen=True)

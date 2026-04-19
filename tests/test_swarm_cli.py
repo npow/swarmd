@@ -38,7 +38,7 @@ def test_list_sessions_empty(tmp_swarm_root):
 def test_list_sessions_shows_entries(tmp_swarm_root, session_id):
     import yaml
 
-    from swarm.lib.paths import mission_yaml_path
+    from swarmd.lib.paths import mission_yaml_path
 
     # Seed a mission for the session
     path = mission_yaml_path(session_id)
@@ -64,7 +64,7 @@ def test_inspect_reports_not_found(tmp_swarm_root):
 
 
 def test_inspect_shows_state(tmp_swarm_root, session_id):
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     # Seed some state
     (session_dir(session_id) / "verifier_status.json").write_text(
@@ -84,7 +84,7 @@ def test_tree_no_subagents(tmp_swarm_root, session_id):
 
 
 def test_tree_shows_subagents(tmp_swarm_root, session_id):
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     tree = {
         "nodes": {
@@ -111,7 +111,7 @@ def test_revise_mission_rejects_bad_input(tmp_swarm_root, session_id, tmp_path):
 def test_revise_mission_replaces_yaml(tmp_swarm_root, session_id, tmp_path):
     import yaml
 
-    from swarm.lib.paths import mission_yaml_path
+    from swarmd.lib.paths import mission_yaml_path
 
     orig = mission_yaml_path(session_id)
     orig.parent.mkdir(parents=True, exist_ok=True)
@@ -207,7 +207,7 @@ def test_gc_kills_orphan_specialist(tmp_swarm_root, session_id):
     """
     import time as _time
 
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     # No launcher.pid → this session is an orphan.
     assert not (session_dir(session_id) / "launcher.pid").exists()
@@ -241,7 +241,7 @@ def test_gc_leaves_live_session_alone(tmp_swarm_root, session_id):
     """gc must NOT kill specialists whose launcher pid is still alive."""
     import time as _time
 
-    from swarm.lib.launcher_liveness import write_launcher_pid
+    from swarmd.lib.launcher_liveness import write_launcher_pid
 
     # Record our own pid as the launcher — we're alive, so this session
     # is legitimate, not an orphan.
@@ -275,7 +275,7 @@ def test_gc_kills_specialist_with_no_state_dir(tmp_swarm_root):
 
     bogus_session_id = uuid.uuid4().hex[:12]
     # Deliberately do NOT create the state dir.
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     assert not session_dir(bogus_session_id).exists()
 

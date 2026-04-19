@@ -12,8 +12,8 @@ import json
 import time
 from dataclasses import dataclass
 
-from swarm.lib.paths import findings_path, session_dir
-from swarm.schemas.finding import Finding
+from swarmd.lib.paths import findings_path, session_dir
+from swarmd.schemas.finding import Finding
 
 
 @dataclass(frozen=True)

@@ -18,16 +18,16 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from swarm.lib.heartbeat import beat, is_stale
-from swarm.lib.ids import mint_finding_id
-from swarm.lib.launcher_liveness import exit_if_launcher_dead
-from swarm.lib.locking import write_line
-from swarm.lib.paths import (
+from swarmd.lib.heartbeat import beat, is_stale
+from swarmd.lib.ids import mint_finding_id
+from swarmd.lib.launcher_liveness import exit_if_launcher_dead
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import (
     ensure_session_dirs,
     findings_path,
     health_beat_path,
 )
-from swarm.schemas.finding import Finding
+from swarmd.schemas.finding import Finding
 
 LOG = logging.getLogger("swarm.supervisor")
 

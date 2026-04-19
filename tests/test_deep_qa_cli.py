@@ -189,7 +189,7 @@ def test_majority_llm_failure_exits_2(tmp_path):
     artifact = tmp_path / "artifact.py"
     artifact.write_text("code here\n")
 
-    from swarm.lib.llm_client import LLMError
+    from swarmd.lib.llm_client import LLMError
 
     # >50% of 5 critics (code) fail — 3 failures
     responses: list = [

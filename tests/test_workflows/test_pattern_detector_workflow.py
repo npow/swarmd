@@ -30,7 +30,7 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
-from swarm.durable.specialists import PatternDetectorWorkflow
+from swarmd.durable.specialists import PatternDetectorWorkflow
 
 
 # --- Module-level state so mock activities can stamp per-test results ------

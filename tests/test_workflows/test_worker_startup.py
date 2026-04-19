@@ -25,13 +25,13 @@ import pytest
 from temporalio.activity import _Definition as _ActivityDefinition
 from temporalio.contrib.pydantic import pydantic_data_converter
 
-from swarm.durable import worker as worker_mod
-from swarm.durable.specialists import (
+from swarmd.durable import worker as worker_mod
+from swarmd.durable.specialists import (
     LLMCriticWorkflow,
     PatternDetectorWorkflow,
     ResourceMonitorWorkflow,
 )
-from swarm.durable.worker import (
+from swarmd.durable.worker import (
     ACTIVITIES,
     DEFAULT_HOST,
     DEFAULT_TASK_QUEUE,
@@ -39,7 +39,7 @@ from swarm.durable.worker import (
     cli_main,
     main,
 )
-from swarm.durable.workflow import MissionWorkflow
+from swarmd.durable.workflow import MissionWorkflow
 
 
 # ---------------------------------------------------------------------------

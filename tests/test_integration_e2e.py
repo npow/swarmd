@@ -21,10 +21,10 @@ from pathlib import Path
 
 import yaml
 
-from swarm.hooks.on_post_tool_use import _summarize_input, _summarize_response
-from swarm.lib.hashing import sha256_file
-from swarm.lib.locking import write_line
-from swarm.lib.paths import (
+from swarmd.hooks.on_post_tool_use import _summarize_input, _summarize_response
+from swarmd.lib.hashing import sha256_file
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import (
     claude_transcript_path,
     findings_path,
     mission_lock_path,
@@ -32,18 +32,18 @@ from swarm.lib.paths import (
     out_of_tree_lock_path,
     session_dir,
 )
-from swarm.schemas.event import Event
-from swarm.schemas.finding import Finding
-from swarm.schemas.lock import MissionLock
-from swarm.schemas.mission import Mission, PatternThresholds
-from swarm.specialists.completion_judge import judge as completion_judge
-from swarm.specialists.coordinator import make_intervention_for
-from swarm.specialists.event_scribe import emit_event, read_events
-from swarm.specialists.pattern_detector import (
+from swarmd.schemas.event import Event
+from swarmd.schemas.finding import Finding
+from swarmd.schemas.lock import MissionLock
+from swarmd.schemas.mission import Mission, PatternThresholds
+from swarmd.specialists.completion_judge import judge as completion_judge
+from swarmd.specialists.coordinator import make_intervention_for
+from swarmd.specialists.event_scribe import emit_event, read_events
+from swarmd.specialists.pattern_detector import (
     detect_once,
     detect_scope_shrinking,
 )
-from swarm.specialists.success_verifier import run_all_checks
+from swarmd.specialists.success_verifier import run_all_checks
 
 
 def _mk_mission(session_id: str, tmp_path: Path) -> Mission:

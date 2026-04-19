@@ -41,12 +41,12 @@ from pathlib import Path
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.run_claude_cli import (
+from swarmd.durable.activities.run_claude_cli import (
     ClaudeResult,
     run_claude_cli,
     should_use_resume,
 )
-from swarm.durable.errors import TransientError
+from swarmd.durable.errors import TransientError
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ async def test_first_attempt_spawns_with_use_resume_false(tmp_path, monkeypatch)
         return _spawn_sh("exit 0")
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.spawn_claude", fake_spawn
+        "swarmd.durable.activities.run_claude_cli.spawn_claude", fake_spawn
     )
     # Point tail at an empty tmp dir so the tail task has nothing to do.
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -132,7 +132,7 @@ async def test_retry_attempt_spawns_with_use_resume_true(tmp_path, monkeypatch):
         return _spawn_sh("exit 0")
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.spawn_claude", fake_spawn
+        "swarmd.durable.activities.run_claude_cli.spawn_claude", fake_spawn
     )
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -164,7 +164,7 @@ async def test_heartbeat_fires_at_least_once_during_run(
 
     # Shrink the interval to 0.1s so we can observe 1-2 heartbeats in <1s.
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.1
+        "swarmd.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.1
     )
 
     def fake_spawn(session_id, mission_prose, use_resume):
@@ -172,7 +172,7 @@ async def test_heartbeat_fires_at_least_once_during_run(
         return _spawn_sh("sleep 0.5; exit 0")
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.spawn_claude", fake_spawn
+        "swarmd.durable.activities.run_claude_cli.spawn_claude", fake_spawn
     )
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -203,7 +203,7 @@ async def test_heartbeat_reflects_event_tailer_updates(
     tailed event.
     """
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
     )
 
     session_id = "sid-events"
@@ -218,11 +218,11 @@ async def test_heartbeat_reflects_event_tailer_updates(
         return _spawn_sh("sleep 1.5; exit 0")
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.spawn_claude", fake_spawn
+        "swarmd.durable.activities.run_claude_cli.spawn_claude", fake_spawn
     )
     # Shrink the tail poll interval too for test speed.
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
     )
 
     captured: list[dict] = []
@@ -271,10 +271,10 @@ async def test_cancel_sigterms_process_group(tmp_path, monkeypatch):
     """
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
     )
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -290,7 +290,7 @@ async def test_cancel_sigterms_process_group(tmp_path, monkeypatch):
         return p
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.spawn_claude", fake_spawn
+        "swarmd.durable.activities.run_claude_cli.spawn_claude", fake_spawn
     )
 
     env = ActivityEnvironment()
@@ -331,13 +331,13 @@ async def test_cancel_sigkills_stubborn_process_group(tmp_path, monkeypatch):
     """
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.SIGTERM_GRACE_SEC", 0.5
+        "swarmd.durable.activities.run_claude_cli.SIGTERM_GRACE_SEC", 0.5
     )
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -352,7 +352,7 @@ async def test_cancel_sigkills_stubborn_process_group(tmp_path, monkeypatch):
         return p
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.spawn_claude", fake_spawn
+        "swarmd.durable.activities.run_claude_cli.spawn_claude", fake_spawn
     )
 
     env = ActivityEnvironment()
@@ -390,10 +390,10 @@ async def test_non_zero_exit_raises_transient_error(tmp_path, monkeypatch):
     """
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
     )
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -403,7 +403,7 @@ async def test_non_zero_exit_raises_transient_error(tmp_path, monkeypatch):
         )  # non-zero exit with stderr
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.spawn_claude", fake_spawn
+        "swarmd.durable.activities.run_claude_cli.spawn_claude", fake_spawn
     )
 
     env = ActivityEnvironment()
@@ -426,10 +426,10 @@ async def test_zero_exit_returns_claude_result(tmp_path, monkeypatch):
     events were emitted to the tail) and exit_code=0."""
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.HEARTBEAT_INTERVAL_SEC", 0.05
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
+        "swarmd.durable.activities.run_claude_cli.TAIL_POLL_INTERVAL_SEC", 0.05
     )
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -437,7 +437,7 @@ async def test_zero_exit_returns_claude_result(tmp_path, monkeypatch):
         return _spawn_sh("echo ok; exit 0")
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.spawn_claude", fake_spawn
+        "swarmd.durable.activities.run_claude_cli.spawn_claude", fake_spawn
     )
 
     env = ActivityEnvironment()
@@ -468,10 +468,10 @@ def test_spawn_claude_first_attempt_argv(monkeypatch):
         return real_popen(["sh", "-c", "exit 0"], **kwargs)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.subprocess.Popen", fake_popen
+        "swarmd.durable.activities.run_claude_cli.subprocess.Popen", fake_popen
     )
 
-    from swarm.durable.activities.run_claude_cli import spawn_claude
+    from swarmd.durable.activities.run_claude_cli import spawn_claude
 
     p = spawn_claude("sid-x", "my prose", use_resume=False)
     p.wait()
@@ -497,10 +497,10 @@ def test_spawn_claude_resume_attempt_argv(monkeypatch):
         return real_popen(["sh", "-c", "exit 0"], **kwargs)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.run_claude_cli.subprocess.Popen", fake_popen
+        "swarmd.durable.activities.run_claude_cli.subprocess.Popen", fake_popen
     )
 
-    from swarm.durable.activities.run_claude_cli import spawn_claude
+    from swarmd.durable.activities.run_claude_cli import spawn_claude
 
     p = spawn_claude("sid-y", "ignored on resume", use_resume=True)
     p.wait()

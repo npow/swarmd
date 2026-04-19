@@ -14,7 +14,7 @@ import threading
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from swarm.lib.locking import locked_rmw, write_line
+from swarmd.lib.locking import locked_rmw, write_line
 
 
 @given(

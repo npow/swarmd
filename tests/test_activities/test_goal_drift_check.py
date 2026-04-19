@@ -45,11 +45,11 @@ import pytest
 from anthropic import APIStatusError, AuthenticationError, RateLimitError
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.goal_drift_check import (
+from swarmd.durable.activities.goal_drift_check import (
     GoalDriftResult,
     goal_drift_check,
 )
-from swarm.durable.errors import AuthError, TerminalError, TransientError
+from swarmd.durable.errors import AuthError, TerminalError, TransientError
 
 
 def _make_mock_anthropic(text: str) -> MagicMock:
@@ -95,7 +95,7 @@ async def test_happy_path_drifting():
             }
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(goal_drift_check, _context())
 
@@ -121,7 +121,7 @@ async def test_happy_path_on_track():
             }
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(goal_drift_check, _context())
 
@@ -143,7 +143,7 @@ async def test_off_task_is_critical():
             }
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(goal_drift_check, _context())
 
@@ -165,7 +165,7 @@ async def test_plan_fabrication_is_fabrication_type():
             }
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(goal_drift_check, _context())
 
@@ -186,7 +186,7 @@ async def test_unclear_returns_info():
             }
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(goal_drift_check, _context())
 
@@ -198,7 +198,7 @@ async def test_unclear_returns_info():
 async def test_malformed_json_raises_terminal():
     """Malformed JSON → TerminalError. Retries won't produce a valid parse."""
     mock_ctor = _make_mock_anthropic("totally not json {")
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(TerminalError):
             await env.run(goal_drift_check, _context())
@@ -217,7 +217,7 @@ async def test_bad_verdict_value_raises_terminal():
             }
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(TerminalError):
             await env.run(goal_drift_check, _context())
@@ -240,7 +240,7 @@ async def test_rate_limit_raises_transient():
     )
     mock_ctor = MagicMock(return_value=mock_client)
 
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(TransientError):
             await env.run(goal_drift_check, _context())
@@ -253,7 +253,7 @@ async def test_overloaded_raises_transient():
     mock_client.messages.create.side_effect = _make_api_status_error(424)
     mock_ctor = MagicMock(return_value=mock_client)
 
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(TransientError):
             await env.run(goal_drift_check, _context())
@@ -268,7 +268,7 @@ async def test_auth_error_raises_terminal():
     )
     mock_ctor = MagicMock(return_value=mock_client)
 
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(AuthError):
             await env.run(goal_drift_check, _context())
@@ -282,7 +282,7 @@ async def test_model_id_is_haiku():
             {"verdict": "on_track", "reason": "ok", "evidence_turn_ids": []}
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         await env.run(goal_drift_check, _context())
 
@@ -306,7 +306,7 @@ async def test_context_content_passed_into_prompt():
             {"verdict": "on_track", "reason": "ok", "evidence_turn_ids": []}
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         await env.run(goal_drift_check, ctx)
 
@@ -331,7 +331,7 @@ async def test_evidence_turn_ids_preserved_on_finding():
             }
         )
     )
-    with patch("swarm.durable.activities.goal_drift_check.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.goal_drift_check.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(goal_drift_check, _context())
 

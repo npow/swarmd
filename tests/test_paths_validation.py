@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from swarm.lib.paths import (
+from swarmd.lib.paths import (
     _reset_for_tests,
     mission_dir,
     out_of_tree_lock_path,

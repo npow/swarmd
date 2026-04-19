@@ -12,8 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from swarm.lib.paths import ensure_session_dirs  # noqa: E402
-from swarm.specialists.event_scribe import emit_event  # noqa: E402
+from swarmd.lib.paths import ensure_session_dirs  # noqa: E402
+from swarmd.specialists.event_scribe import emit_event  # noqa: E402
 
 
 def main() -> int:

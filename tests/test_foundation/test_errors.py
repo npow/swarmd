@@ -14,7 +14,7 @@ from datetime import timedelta
 
 import pytest
 
-from swarm.durable.errors import (
+from swarmd.durable.errors import (
     AuthError,
     BillingError,  # noqa: F401  (re-export smoke import per plan)
     ContextOverflowError,  # noqa: F401  (re-export smoke import per plan)
@@ -77,7 +77,7 @@ def test_retry_policies_module_has_expected_policies() -> None:
     """Verify the retry_policies module imports and exposes RetryPolicy instances."""
     from temporalio.common import RetryPolicy
 
-    from swarm.durable import retry_policies
+    from swarmd.durable import retry_policies
 
     # Spot-check RUN_CLAUDE_CLI: 2s / 5min / ×2 / 20 attempts.
     assert isinstance(retry_policies.RUN_CLAUDE_CLI, RetryPolicy)
@@ -107,7 +107,7 @@ def test_all_retry_policies_share_backoff_and_non_retryable_types() -> None:
     non_retryable_error_types list."""
     from temporalio.common import RetryPolicy
 
-    from swarm.durable import retry_policies
+    from swarmd.durable import retry_policies
 
     expected_policies = [
         ("RUN_CLAUDE_CLI", 2, 300, 20),

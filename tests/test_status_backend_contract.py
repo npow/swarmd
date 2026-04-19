@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 
-from swarm.lib.status import SessionSnapshot
+from swarmd.lib.status import SessionSnapshot
 
 
 def test_load_is_total_never_raises_for_valid_session_id(tmp_swarm_root, session_id):
@@ -75,7 +75,7 @@ def test_interventions_pending_le_total(tmp_swarm_root, session_id):
 
 def test_health_is_stale_matches_age(tmp_swarm_root, session_id):
     """For every health entry, is_stale is True iff last_beat_age_sec > STALE_SEC."""
-    from swarm.lib.status import STALE_SEC
+    from swarmd.lib.status import STALE_SEC
 
     snap = SessionSnapshot.load(session_id)
     for h in snap.health:

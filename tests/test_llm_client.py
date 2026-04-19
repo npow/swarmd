@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from swarm.lib.llm_client import LLMError, call
+from swarmd.lib.llm_client import LLMError, call
 
 
 # ---------------------------------------------------------------------------

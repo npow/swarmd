@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import time
 
-from swarm.lib.interventions import ack as ack_intervention
-from swarm.lib.interventions import read_all
-from swarm.lib.locking import write_line
-from swarm.lib.paths import interventions_path
-from swarm.schemas.intervention import Intervention
-from swarm.specialists.coordinator import (
+from swarmd.lib.interventions import ack as ack_intervention
+from swarmd.lib.interventions import read_all
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import interventions_path
+from swarmd.schemas.intervention import Intervention
+from swarmd.specialists.coordinator import (
     REISSUE_AFTER_SEC,
     _maybe_emit_checkpoint,
     _reissue_stale,

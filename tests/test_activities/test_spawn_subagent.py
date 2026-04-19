@@ -24,11 +24,11 @@ import uuid
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.spawn_subagent import (
+from swarmd.durable.activities.spawn_subagent import (
     SpawnResult,
     spawn_subagent,
 )
-from swarm.durable.errors import TerminalError, TransientError
+from swarmd.durable.errors import TerminalError, TransientError
 
 
 # ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ async def test_happy_path_populates_spawn_result(monkeypatch):
     """Basic spawn returns SpawnResult with uuid, pid, depth, and argv."""
     captured: dict = {}
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         _fake_popen_factory(captured),
     )
 
@@ -102,7 +102,7 @@ async def test_argv_contains_session_id_and_prompt(monkeypatch):
     --dangerously-skip-permissions, and the prompt text."""
     captured: dict = {}
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         _fake_popen_factory(captured),
     )
 
@@ -125,7 +125,7 @@ async def test_root_spawn_parent_none(monkeypatch):
     """A root spawn has parent_id=None and depth=0."""
     captured: dict = {}
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         _fake_popen_factory(captured),
     )
 
@@ -148,7 +148,7 @@ async def test_start_new_session_true_passed_to_popen(monkeypatch):
     restart / cancel — verify it was passed."""
     captured: dict = {}
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         _fake_popen_factory(captured),
     )
 
@@ -172,7 +172,7 @@ async def test_popen_oserror_raises_transient(monkeypatch):
         raise OSError("cannot exec claude")
 
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         raise_oserror,
     )
 
@@ -191,7 +191,7 @@ async def test_file_not_found_raises_transient(monkeypatch):
         raise FileNotFoundError("claude not on PATH")
 
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         raise_fnf,
     )
 
@@ -243,7 +243,7 @@ async def test_model_override_shows_up_in_argv(monkeypatch):
     """If request specifies ``model``, it's passed to claude via ``--model``."""
     captured: dict = {}
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         _fake_popen_factory(captured),
     )
 
@@ -262,7 +262,7 @@ async def test_no_model_no_model_flag(monkeypatch):
     """Without ``model`` in the request, ``--model`` should not appear."""
     captured: dict = {}
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         _fake_popen_factory(captured),
     )
 

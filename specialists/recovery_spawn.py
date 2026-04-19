@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from swarm.lib.paths import mission_yaml_path, session_dir
+from swarmd.lib.paths import mission_yaml_path, session_dir
 
 LOG = logging.getLogger("swarm.recovery_spawn")
 

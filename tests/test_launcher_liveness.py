@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from swarm.lib.launcher_liveness import (
+from swarmd.lib.launcher_liveness import (
     exit_if_launcher_dead,
     launcher_alive,
     launcher_pid_path,
@@ -106,7 +106,7 @@ def test_write_launcher_pid_creates_parent_dir(tmp_swarm_root, session_id):
     # must succeed. Deliberately remove the parent first.
     import shutil
 
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     shutil.rmtree(session_dir(session_id))
     write_launcher_pid(session_id, os.getpid())

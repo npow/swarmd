@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from swarm.durable.state import CriterionState, MissionState, SpawnTree
+from swarmd.durable.state import CriterionState, MissionState, SpawnTree
 
 
 def test_mission_state_roundtrip() -> None:

@@ -9,19 +9,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from swarm.lib.locking import write_line
-from swarm.lib.paths import (
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import (
     findings_path,
     mission_lock_path,
     mission_yaml_path,
     out_of_tree_lock_path,
     session_dir,
 )
-from swarm.schemas.finding import Finding
-from swarm.schemas.mission import Mission
-from swarm.specialists.completion_judge import judge
-from swarm.specialists.coordinator import make_intervention_for
-from swarm.specialists.success_verifier import run_all_checks, verify_tamper
+from swarmd.schemas.finding import Finding
+from swarmd.schemas.mission import Mission
+from swarmd.specialists.completion_judge import judge
+from swarmd.specialists.coordinator import make_intervention_for
+from swarmd.specialists.success_verifier import run_all_checks, verify_tamper
 
 
 def _write_mission(session_id: str, workspace: Path) -> Mission:
@@ -44,8 +44,8 @@ def _write_mission(session_id: str, workspace: Path) -> Mission:
 
 
 def _write_lock(session_id: str) -> None:
-    from swarm.lib.hashing import sha256_file
-    from swarm.schemas.lock import MissionLock
+    from swarmd.lib.hashing import sha256_file
+    from swarmd.schemas.lock import MissionLock
 
     path = mission_yaml_path(session_id)
     lock = MissionLock(

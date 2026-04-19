@@ -14,18 +14,18 @@ import time
 from collections import Counter
 from pathlib import Path
 
-from swarm.lib.heartbeat import beat
-from swarm.lib.ids import mint_finding_id
-from swarm.lib.launcher_liveness import exit_if_launcher_dead
-from swarm.lib.locking import write_line
-from swarm.lib.paths import (
+from swarmd.lib.heartbeat import beat
+from swarmd.lib.ids import mint_finding_id
+from swarmd.lib.launcher_liveness import exit_if_launcher_dead
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import (
     ensure_session_dirs,
     findings_path,
     mission_yaml_path,
 )
-from swarm.schemas.event import Event
-from swarm.schemas.finding import Evidence, Finding
-from swarm.schemas.mission import Mission, PatternThresholds
+from swarmd.schemas.event import Event
+from swarmd.schemas.finding import Evidence, Finding
+from swarmd.schemas.mission import Mission, PatternThresholds
 
 LOG = logging.getLogger("swarm.pattern_detector")
 
@@ -206,7 +206,7 @@ def detect_scope_shrinking(
     if verifier_all_pass:
         return []
     try:
-        from swarm.lib.transcript import last_n_turns as read_last_n_turns
+        from swarmd.lib.transcript import last_n_turns as read_last_n_turns
     except Exception:
         return []
     turns = read_last_n_turns(transcript_path, last_n_turns)
@@ -260,8 +260,8 @@ def _load_mission(session_id: str) -> Mission:
 
 
 def main(session_id: str, period_sec: float = 10.0) -> None:
-    from swarm.lib.paths import claude_transcript_path, session_dir
-    from swarm.specialists.event_scribe import read_events
+    from swarmd.lib.paths import claude_transcript_path, session_dir
+    from swarmd.specialists.event_scribe import read_events
 
     ensure_session_dirs(session_id)
     # Fail fast if launcher is gone — mission load below would crash instead

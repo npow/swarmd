@@ -6,7 +6,7 @@ import json
 import multiprocessing
 import os
 
-from swarm.lib.locking import locked_rmw
+from swarmd.lib.locking import locked_rmw
 
 
 def test_basic_rmw_roundtrip(tmp_path):
@@ -33,7 +33,7 @@ def test_existing_content_returned(tmp_path):
 
 def _crash_simulator(path: str, q):
     """Open the rmw context, write garbage, then kill ourselves before commit."""
-    from swarm.lib.locking import locked_rmw as _l
+    from swarmd.lib.locking import locked_rmw as _l
 
     try:
         with _l(__import__("pathlib").Path(path)) as (fd, data):

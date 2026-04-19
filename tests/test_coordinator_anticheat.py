@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from swarm.schemas.finding import Evidence, Finding
-from swarm.specialists import coordinator
+from swarmd.schemas.finding import Evidence, Finding
+from swarmd.specialists import coordinator
 
 
 def _pass_transition(cid: str = "tests_pass") -> Finding:
@@ -59,7 +59,7 @@ def test_anticheat_cheat_verdicts_written_to_findings(session_id, monkeypatch):
     assert iv is not None
 
     # Verify cheat finding was appended to findings.jsonl
-    from swarm.lib.paths import findings_path
+    from swarmd.lib.paths import findings_path
 
     content = findings_path(session_id).read_text()
     assert "scope_reduction" in content
@@ -90,7 +90,7 @@ def test_set_anticheat_runner_api(session_id, monkeypatch):
         coordinator.make_intervention_for(session_id, _pass_transition())
         assert called["n"] == 1
     finally:
-        from swarm.specialists.anticheat_critic_panel import run_panel
+        from swarmd.specialists.anticheat_critic_panel import run_panel
 
         coordinator.set_anticheat_runner(run_panel)
 

@@ -28,7 +28,7 @@ import json
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.emit_finding import emit_finding
+from swarmd.durable.activities.emit_finding import emit_finding
 
 
 @pytest.mark.asyncio

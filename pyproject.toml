@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "swarm"
+name = "swarmd"
 version = "0.1.0"
 description = "Durable multi-agent orchestrator built on Temporal"
 readme = "README.md"
@@ -29,11 +29,11 @@ dev = [
 ]
 
 [project.scripts]
-swarm = "swarm.cli:cli"
+swarm = "swarmd.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["swarm*"]
+include = ["swarmd*"]
 exclude = ["tests*", "lib*", "hooks*", "specialists*", "schemas*", "scripts*", "templates*", "examples*", "docs*"]
 
 [tool.pytest.ini_options]

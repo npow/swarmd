@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from swarm.specialists.resource_monitor import (
+from swarmd.specialists.resource_monitor import (
     FD_CRIT_RATIO,
     FD_WARN_RATIO,
     ResourceSnapshot,

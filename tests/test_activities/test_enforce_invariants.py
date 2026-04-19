@@ -41,20 +41,20 @@ from unittest.mock import patch
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.enforce_invariants import (
+from swarmd.durable.activities.enforce_invariants import (
     InvariantsResult,
     enforce_invariants,
 )
-from swarm.schemas.mission import Invariants
+from swarmd.schemas.mission import Invariants
 
 # The activity module and its ``enforce_invariants`` function share a dotted
 # name: the ``__init__.py`` for ``swarm.durable.activities`` re-exports the
 # function, which shadows the submodule on attribute lookup. That breaks
-# ``patch("swarm.durable.activities.enforce_invariants._pip_freeze")`` —
+# ``patch("swarmd.durable.activities.enforce_invariants._pip_freeze")`` —
 # mock resolves the dotted path to the FUNCTION object and then fails because
 # functions have no ``_pip_freeze`` attribute. Reaching into ``sys.modules``
 # sidesteps the shadow: the real module object is still registered there.
-_MODULE = sys.modules["swarm.durable.activities.enforce_invariants"]
+_MODULE = sys.modules["swarmd.durable.activities.enforce_invariants"]
 
 
 @pytest.mark.asyncio

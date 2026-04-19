@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from swarm.lib import notify_os
+from swarmd.lib import notify_os
 
 
 def test_truncation_applied():

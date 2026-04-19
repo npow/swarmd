@@ -38,7 +38,7 @@ from __future__ import annotations
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.intervention_judge import (
+from swarmd.durable.activities.intervention_judge import (
     ESCAPE_LADDER,
     InterventionDecision,
     intervention_judge,

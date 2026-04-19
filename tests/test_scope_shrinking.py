@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from swarm.specialists.pattern_detector import detect_scope_shrinking
+from swarmd.specialists.pattern_detector import detect_scope_shrinking
 
 
 def _write_transcript(path: Path, turns: list[dict]) -> None:

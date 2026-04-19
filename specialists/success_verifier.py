@@ -22,12 +22,12 @@ from pathlib import Path
 
 import yaml
 
-from swarm.lib.hashing import sha256_file
-from swarm.lib.heartbeat import beat
-from swarm.lib.ids import mint_finding_id
-from swarm.lib.launcher_liveness import exit_if_launcher_dead
-from swarm.lib.locking import write_line
-from swarm.lib.paths import (
+from swarmd.lib.hashing import sha256_file
+from swarmd.lib.heartbeat import beat
+from swarmd.lib.ids import mint_finding_id
+from swarmd.lib.launcher_liveness import exit_if_launcher_dead
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import (
     ensure_session_dirs,
     findings_path,
     mission_dir,
@@ -36,9 +36,9 @@ from swarm.lib.paths import (
     out_of_tree_lock_path,
     session_dir,
 )
-from swarm.schemas.finding import Evidence, Finding
-from swarm.schemas.lock import MissionLock
-from swarm.schemas.mission import Mission, SuccessCriterion
+from swarmd.schemas.finding import Evidence, Finding
+from swarmd.schemas.lock import MissionLock
+from swarmd.schemas.mission import Mission, SuccessCriterion
 
 LOG = logging.getLogger("swarm.success_verifier")
 

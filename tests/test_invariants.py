@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from swarm.schemas.mission import Mission
-from swarm.specialists.success_verifier import enforce_invariants
+from swarmd.schemas.mission import Mission
+from swarmd.specialists.success_verifier import enforce_invariants
 
 
 def _mission(tmp_path, **invariants):

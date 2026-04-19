@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from swarm.schemas.finding import Evidence, Finding
-from swarm.specialists.coordinator import (
+from swarmd.schemas.finding import Evidence, Finding
+from swarmd.specialists.coordinator import (
     bump_strike,
     loop_signature,
     make_intervention_for,
@@ -51,7 +51,7 @@ def test_pick_rung_rotates(session_id):
 
 def test_pick_rung_exhaustion(session_id):
     sig = "sig2"
-    from swarm.specialists.coordinator import ESCAPE_LADDER
+    from swarmd.specialists.coordinator import ESCAPE_LADDER
 
     for name, _ in ESCAPE_LADDER:
         record_tried(session_id, sig, name, "attempted")

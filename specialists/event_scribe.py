@@ -10,10 +10,10 @@ import json
 import re
 import time
 
-from swarm.lib.ids import mint_event_id
-from swarm.lib.locking import write_line
-from swarm.lib.paths import events_path, session_dir
-from swarm.schemas.event import Event
+from swarmd.lib.ids import mint_event_id
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import events_path, session_dir
+from swarmd.schemas.event import Event
 
 # Cap on per-event detail spill (bytes). Prevents disk exhaustion via
 # very large tool responses (security review M4).

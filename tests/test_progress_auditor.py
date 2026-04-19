@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from swarm.specialists.progress_auditor import AuditResult, _collect, _parse, audit
+from swarmd.specialists.progress_auditor import AuditResult, _collect, _parse, audit
 
 
 def _write_transcript(path: Path, turns: list[dict]) -> None:

@@ -29,8 +29,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from swarm.lib.ids import mint_finding_id
-from swarm.schemas.finding import Evidence, Finding
+from swarmd.lib.ids import mint_finding_id
+from swarmd.schemas.finding import Evidence, Finding
 
 LOG = logging.getLogger("swarm.resource_monitor")
 
@@ -153,7 +153,7 @@ def _tracked_pids(session_id: str) -> list[int]:
     """Collect PIDs from heartbeats + tree.json for the session."""
     pids: list[int] = []
     # Defer imports so resource_monitor can be imported standalone
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     health = session_dir(session_id) / "health"
     if health.exists():
@@ -184,7 +184,7 @@ def _tracked_pids(session_id: str) -> list[int]:
 
 def _state_disk_mb(session_id: str) -> float:
     """Total size (MB) of the session state directory."""
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     sdir = session_dir(session_id)
     if not sdir.exists():
@@ -330,10 +330,10 @@ def main(session_id: str, period_sec: float = 30.0) -> None:
     """Poll loop for a long-running resource_monitor daemon."""
     import time as _time
 
-    from swarm.lib.heartbeat import beat
-    from swarm.lib.launcher_liveness import exit_if_launcher_dead
-    from swarm.lib.locking import write_line
-    from swarm.lib.paths import ensure_session_dirs, findings_path
+    from swarmd.lib.heartbeat import beat
+    from swarmd.lib.launcher_liveness import exit_if_launcher_dead
+    from swarmd.lib.locking import write_line
+    from swarmd.lib.paths import ensure_session_dirs, findings_path
 
     ensure_session_dirs(session_id)
     exit_if_launcher_dead(session_id, LOG)

@@ -22,9 +22,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from swarm.lib import llm_client
-from swarm.lib.ids import mint_finding_id
-from swarm.schemas.finding import Evidence, Finding
+from swarmd.lib import llm_client
+from swarmd.lib.ids import mint_finding_id
+from swarmd.schemas.finding import Evidence, Finding
 
 LOG = logging.getLogger("swarm.anticheat")
 

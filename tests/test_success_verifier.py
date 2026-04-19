@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from swarm.schemas.mission import Mission, SuccessCriterion
-from swarm.specialists.success_verifier import (
+from swarmd.schemas.mission import Mission, SuccessCriterion
+from swarmd.specialists.success_verifier import (
     enforce_invariants,
     run_all_checks,
     run_check,

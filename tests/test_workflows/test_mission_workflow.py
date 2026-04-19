@@ -29,20 +29,20 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from swarm.durable.activities import (
+from swarmd.durable.activities import (
     CompletionDecision,
     CriterionCheckResult,
     InvariantsResult,
     TamperResult,
 )
-from swarm.durable.specialists import (
+from swarmd.durable.specialists import (
     LLMCriticWorkflow,
     PatternDetectorWorkflow,
     ResourceMonitorWorkflow,
 )
-from swarm.durable.state import MissionState
-from swarm.durable.workflow import MissionWorkflow
-from swarm.schemas.mission import (
+from swarmd.durable.state import MissionState
+from swarmd.durable.workflow import MissionWorkflow
+from swarmd.schemas.mission import (
     Invariants,
     Mission,
     SuccessCriterion,

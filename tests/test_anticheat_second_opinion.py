@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from swarm.specialists.anticheat_critic_panel import run_panel
+from swarmd.specialists.anticheat_critic_panel import run_panel
 
 
 def _llm(d: dict):

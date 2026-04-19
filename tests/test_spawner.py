@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from swarm.schemas.mission import Concurrency
-from swarm.specialists.spawner import (
+from swarmd.schemas.mission import Concurrency
+from swarmd.specialists.spawner import (
     AdmissionResult,
     SpawnerState,
     SpawnRequest,

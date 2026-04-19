@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from swarm.schemas.event import Event
-from swarm.schemas.finding import Evidence, Finding
-from swarm.schemas.intervention import Intervention
-from swarm.schemas.mission import Mission
+from swarmd.schemas.event import Event
+from swarmd.schemas.finding import Evidence, Finding
+from swarmd.schemas.intervention import Intervention
+from swarmd.schemas.mission import Mission
 
 
 def test_event_roundtrip():
@@ -103,7 +103,7 @@ def test_mission_defaults(sample_mission):
 
 def test_mission_max_duration_sec_default(tmp_path):
     """Mission.max_duration_sec defaults to 14400 (4 hours) per plan Task 3."""
-    from swarm.schemas.mission import Mission
+    from swarmd.schemas.mission import Mission
 
     m = Mission(
         mission="x",
@@ -117,7 +117,7 @@ def test_mission_max_duration_sec_default(tmp_path):
 
 def test_mission_max_duration_sec_user_value(tmp_path):
     """User-provided max_duration_sec is preserved."""
-    from swarm.schemas.mission import Mission
+    from swarmd.schemas.mission import Mission
 
     m = Mission(
         mission="x",
@@ -133,7 +133,7 @@ def test_mission_max_duration_sec_user_value(tmp_path):
 def test_observer_config_new_cadence_fields_accepted():
     """Spec §6.2 observer_config: pattern_detector_sec, llm_critic_sec,
     resource_monitor_sec are accepted and preserved."""
-    from swarm.schemas.mission import ObserverConfig
+    from swarmd.schemas.mission import ObserverConfig
 
     oc = ObserverConfig(
         pattern_detector_sec=15,
@@ -147,7 +147,7 @@ def test_observer_config_new_cadence_fields_accepted():
 
 def test_observer_config_defaults_for_new_fields():
     """Plan Task 3 defaults for the three new cadences."""
-    from swarm.schemas.mission import ObserverConfig
+    from swarmd.schemas.mission import ObserverConfig
 
     oc = ObserverConfig()
     assert oc.pattern_detector_sec == 10
@@ -157,7 +157,7 @@ def test_observer_config_defaults_for_new_fields():
 
 def test_observer_config_backward_compat_existing_fields():
     """Pre-existing ObserverConfig fields must still work (no break)."""
-    from swarm.schemas.mission import ObserverConfig, PatternThresholds
+    from swarmd.schemas.mission import ObserverConfig, PatternThresholds
 
     oc = ObserverConfig(
         plan_checkpoint_every_sec=123,
@@ -174,7 +174,7 @@ def test_observer_config_backward_compat_existing_fields():
 def test_mission_yaml_style_dict_with_new_fields(tmp_path):
     """A mission.yaml-style dict with the new fields round-trips through
     Mission.model_validate without losing existing validators."""
-    from swarm.schemas.mission import Mission
+    from swarmd.schemas.mission import Mission
 
     m = Mission.model_validate(
         {

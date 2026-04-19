@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from swarm.lib.launcher_liveness import launcher_pid_path, write_launcher_pid
-from swarm.lib.paths import ensure_session_dirs, mission_yaml_path
+from swarmd.lib.launcher_liveness import launcher_pid_path, write_launcher_pid
+from swarmd.lib.paths import ensure_session_dirs, mission_yaml_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

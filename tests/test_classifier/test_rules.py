@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from swarm.classifier.rules import (
+from swarmd.classifier.rules import (
     ClassifierResult,
     ClassifierVerdict,
     classify,

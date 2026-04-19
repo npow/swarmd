@@ -70,7 +70,7 @@ def test_cli_rejects_depth_over_max(tmp_swarm_root, session_id):
 
 def test_cli_queues_at_budget(tmp_swarm_root, session_id):
     # Seed tree.json at the max-live budget of 1
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     sdir = session_dir(session_id)
     sdir.mkdir(parents=True, exist_ok=True)
@@ -137,7 +137,7 @@ def test_cli_admit_registers_child_id(tmp_swarm_root, session_id):
     assert data["verdict"] == "admit"
     assert "child_id" in data
     # Child was recorded in tree.json
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     tree = json.loads((session_dir(session_id) / "tree.json").read_text())
     assert data["child_id"] in tree["nodes"]

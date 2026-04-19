@@ -35,7 +35,7 @@ import json
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.verify_tamper import (
+from swarmd.durable.activities.verify_tamper import (
     TamperResult,
     verify_tamper,
 )

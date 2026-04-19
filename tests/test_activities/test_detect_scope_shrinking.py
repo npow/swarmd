@@ -17,11 +17,11 @@ from __future__ import annotations
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.detect_scope_shrinking import (
+from swarmd.durable.activities.detect_scope_shrinking import (
     ScopeShrinkingResult,
     detect_scope_shrinking,
 )
-from swarm.durable.errors import TerminalError
+from swarmd.durable.errors import TerminalError
 
 
 # ---------------------------------------------------------------------------

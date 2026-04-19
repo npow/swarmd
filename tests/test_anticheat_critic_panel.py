@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-from swarm.specialists.anticheat_critic_panel import (
+from swarmd.specialists.anticheat_critic_panel import (
     TAXONOMY,
     CriticVerdict,
     _parse,
@@ -211,7 +211,7 @@ def test_default_runner_uses_gateway_client():
 
 def test_default_runner_returns_empty_on_LLMError():
     """When llm_client.call raises LLMError, default_llm_runner returns '' (UNCLEAR)."""
-    from swarm.lib.llm_client import LLMError
+    from swarmd.lib.llm_client import LLMError
     with patch("swarm.lib.llm_client.call", side_effect=LLMError("gateway down")):
         result = default_llm_runner("test prompt")
     assert result == ""

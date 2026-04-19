@@ -33,8 +33,8 @@ import pytest
 import yaml
 from anthropic import APIStatusError, AuthenticationError, RateLimitError
 
-from swarm.durable.errors import AuthError, TerminalError, TransientError
-from swarm.mcp.server import (
+from swarmd.durable.errors import AuthError, TerminalError, TransientError
+from swarmd.mcp.server import (
     _launch_impl,
     _propose_criteria_impl,
     _query_impl,
@@ -175,7 +175,7 @@ class TestProposeCriteriaHappyPath:
         raw = _canonical_mission_json()
         mock_ctor = _make_mock_anthropic(raw)
 
-        with patch("swarm.mcp.server.Anthropic", mock_ctor):
+        with patch("swarmd.mcp.server.Anthropic", mock_ctor):
             result = await _propose_criteria_impl(
                 "fix the flaky test in test_auth.py"
             )
@@ -212,7 +212,7 @@ class TestProposeCriteriaErrors:
     async def test_malformed_response_raises_terminal(self):
         """Plain prose → TerminalError. Retries won't turn prose into JSON."""
         mock_ctor = _make_mock_anthropic("I think this is a mission")
-        with patch("swarm.mcp.server.Anthropic", mock_ctor):
+        with patch("swarmd.mcp.server.Anthropic", mock_ctor):
             with pytest.raises(TerminalError):
                 await _propose_criteria_impl("fix X")
 
@@ -220,7 +220,7 @@ class TestProposeCriteriaErrors:
         """JSON with no success_criteria → TerminalError."""
         raw = json.dumps({"mission": "x", "workspace": "/tmp"})
         mock_ctor = _make_mock_anthropic(raw)
-        with patch("swarm.mcp.server.Anthropic", mock_ctor):
+        with patch("swarmd.mcp.server.Anthropic", mock_ctor):
             with pytest.raises(TerminalError):
                 await _propose_criteria_impl("fix X")
 
@@ -230,7 +230,7 @@ class TestProposeCriteriaErrors:
             {"mission": "x", "workspace": "/tmp", "success_criteria": []}
         )
         mock_ctor = _make_mock_anthropic(raw)
-        with patch("swarm.mcp.server.Anthropic", mock_ctor):
+        with patch("swarmd.mcp.server.Anthropic", mock_ctor):
             with pytest.raises(TerminalError):
                 await _propose_criteria_impl("fix X")
 
@@ -241,7 +241,7 @@ class TestProposeCriteriaErrors:
             429, cls=RateLimitError
         )
         mock_ctor = MagicMock(return_value=mock_client)
-        with patch("swarm.mcp.server.Anthropic", mock_ctor):
+        with patch("swarmd.mcp.server.Anthropic", mock_ctor):
             with pytest.raises(TransientError):
                 await _propose_criteria_impl("fix X")
 
@@ -253,7 +253,7 @@ class TestProposeCriteriaErrors:
             401, cls=AuthenticationError
         )
         mock_ctor = MagicMock(return_value=mock_client)
-        with patch("swarm.mcp.server.Anthropic", mock_ctor):
+        with patch("swarmd.mcp.server.Anthropic", mock_ctor):
             with pytest.raises(AuthError):
                 await _propose_criteria_impl("fix X")
 
@@ -276,7 +276,7 @@ class TestProposeCriteriaContextWiring:
         mock_ctor = MagicMock(return_value=mock_client)
 
         context = {"cwd": "/tmp/project", "recent_file": "auth.py"}
-        with patch("swarm.mcp.server.Anthropic", mock_ctor):
+        with patch("swarmd.mcp.server.Anthropic", mock_ctor):
             await _propose_criteria_impl("fix X", context=context)
 
         assert len(captured) == 1
@@ -299,7 +299,7 @@ class TestProposeCriteriaContextWiring:
         mock_client.messages.create.side_effect = capturing_create
         mock_ctor = MagicMock(return_value=mock_client)
 
-        with patch("swarm.mcp.server.Anthropic", mock_ctor):
+        with patch("swarmd.mcp.server.Anthropic", mock_ctor):
             await _propose_criteria_impl("fix X", context=None)
 
         assert "(none)" in captured[0]
@@ -320,7 +320,7 @@ class TestLaunchHappyPath:
 
         mock_client = _MockTemporalClient(pollers=1)
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = await _launch_impl(yaml_text)
@@ -350,7 +350,7 @@ class TestLaunchValidation:
         # code mistakenly tries to connect, we'll see the test hang
         # rather than silently passing.
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(side_effect=AssertionError("should not connect")),
         ):
             with pytest.raises(TerminalError, match="validation failed"):
@@ -371,7 +371,7 @@ class TestLaunchNoWorker:
 
         mock_client = _MockTemporalClient(pollers=0)
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = await _launch_impl(yaml_text)
@@ -396,7 +396,7 @@ class TestLaunchLock:
         mock_client = _MockTemporalClient(pollers=1)
 
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             with pytest.raises(TerminalError, match="locked"):
@@ -413,7 +413,7 @@ class TestLaunchLock:
 
         mock_client = _MockTemporalClient(pollers=1)
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = await _launch_impl(yaml_text)
@@ -435,7 +435,7 @@ class TestLaunchWorkspaceOverride:
 
         mock_client = _MockTemporalClient(pollers=1)
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             await _launch_impl(yaml_text, workspace=str(override_ws))
@@ -461,7 +461,7 @@ class TestLaunchTemporalUnreachable:
         yaml_text = _valid_mission_yaml(str(ws))
 
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(side_effect=OSError("connection refused")),
         ):
             with pytest.raises(TransientError):
@@ -484,7 +484,7 @@ class TestQueryHappyPath:
         }
         mock_client = _MockTemporalClient(query_result=expected)
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             result = await _query_impl("mission-abc123")
@@ -503,7 +503,7 @@ class TestQueryErrors:
             query_raises=RuntimeError("workflow not found"),
         )
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             with pytest.raises(TerminalError, match="not found"):
@@ -512,7 +512,7 @@ class TestQueryErrors:
     async def test_temporal_unreachable_raises_transient(self):
         """Client.connect raising → TransientError."""
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(side_effect=OSError("connection refused")),
         ):
             with pytest.raises(TransientError):
@@ -525,7 +525,7 @@ class TestQueryErrors:
             query_raises=RuntimeError("deadline exceeded"),
         )
         with patch(
-            "swarm.mcp.server.Client.connect",
+            "swarmd.mcp.server.Client.connect",
             AsyncMock(return_value=mock_client),
         ):
             with pytest.raises(TransientError):

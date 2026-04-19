@@ -17,7 +17,7 @@ satisfy the invariants should pass.
 
 from __future__ import annotations
 
-from swarm.classifier.prompts import CLASSIFIER_PROMPT
+from swarmd.classifier.prompts import CLASSIFIER_PROMPT
 
 
 class TestClassifierPromptShape:

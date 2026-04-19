@@ -7,8 +7,8 @@ from dataclasses import dataclass
 
 import yaml
 
-from swarm.lib.paths import mission_yaml_path, session_dir
-from swarm.specialists.recovery_spawn import (
+from swarmd.lib.paths import mission_yaml_path, session_dir
+from swarmd.specialists.recovery_spawn import (
     RecoveryResult,
     spawn_recovery,
     write_briefing,

@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from swarm.lib.status import (
+from swarmd.lib.status import (
     CriterionStatus,
     SessionSnapshot,
     SpecialistHealth,
@@ -91,7 +91,7 @@ import os
 
 
 def test_load_launcher_alive_when_pid_file_has_live_pid(tmp_swarm_root, session_id):
-    from swarm.lib.launcher_liveness import write_launcher_pid
+    from swarmd.lib.launcher_liveness import write_launcher_pid
 
     write_launcher_pid(session_id, os.getpid())
     snap = SessionSnapshot.load(session_id)
@@ -105,7 +105,7 @@ def test_load_launcher_dead_when_pid_file_missing(tmp_swarm_root, session_id):
 
 
 def test_load_criteria_from_verifier_status(tmp_swarm_root, session_id):
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     (session_dir(session_id) / "verifier_status.json").write_text(
         json.dumps(
@@ -137,7 +137,7 @@ def test_load_criteria_when_verifier_status_missing(tmp_swarm_root, session_id):
 
 
 def test_load_criteria_when_verifier_status_unparseable(tmp_swarm_root, session_id):
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     (session_dir(session_id) / "verifier_status.json").write_text("{not json")
     snap = SessionSnapshot.load(session_id)
@@ -149,7 +149,7 @@ import yaml
 
 
 def _write_mission(session_id: str, title: str, workspace: str, hold: int = 120):
-    from swarm.lib.paths import mission_yaml_path
+    from swarmd.lib.paths import mission_yaml_path
 
     p = mission_yaml_path(session_id)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -193,7 +193,7 @@ def test_load_hold_target_sec_from_mission(tmp_swarm_root, session_id, tmp_path)
 
 
 def test_load_hold_sec_is_zero_when_not_all_pass(tmp_swarm_root, session_id, tmp_path):
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -208,7 +208,7 @@ def test_load_hold_sec_is_zero_when_not_all_pass(tmp_swarm_root, session_id, tmp
 def test_load_hold_sec_computed_from_verifier_ts_when_all_pass(
     tmp_swarm_root, session_id, tmp_path
 ):
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -227,10 +227,10 @@ def test_load_hold_sec_computed_from_verifier_ts_when_all_pass(
     assert 29.0 < snap.hold_sec < 31.0
 
 
-from swarm.lib.locking import write_line
-from swarm.lib.paths import findings_path, interventions_path, interventions_acked_path
-from swarm.schemas.finding import Evidence, Finding
-from swarm.schemas.intervention import Intervention
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import findings_path, interventions_path, interventions_acked_path
+from swarmd.schemas.finding import Evidence, Finding
+from swarmd.schemas.intervention import Intervention
 
 
 def _mk_finding(sid: str, severity: str = "major", subtype: str = "loop") -> Finding:
@@ -287,7 +287,7 @@ def test_load_malformed_findings_line_is_skipped(tmp_swarm_root, session_id):
 
 
 def test_load_interventions_counts_pending(tmp_swarm_root, session_id):
-    from swarm.lib.locking import write_line
+    from swarmd.lib.locking import write_line
 
     ip = interventions_path(session_id)
     iv_acked = _mk_intervention("a")
@@ -304,8 +304,8 @@ def test_load_interventions_counts_pending(tmp_swarm_root, session_id):
 # Task 6: health, iter_count, events
 # ---------------------------------------------------------------------------
 
-from swarm.lib.heartbeat import beat
-from swarm.lib.paths import events_path
+from swarmd.lib.heartbeat import beat
+from swarmd.lib.paths import events_path
 
 
 def test_load_health_from_beats(tmp_swarm_root, session_id):
@@ -352,7 +352,7 @@ def test_find_most_recent_returns_none_when_empty(tmp_swarm_root):
 
 
 def test_find_most_recent_picks_newest_events_mtime(tmp_swarm_root, tmp_path):
-    from swarm.lib.paths import ensure_session_dirs, events_path
+    from swarmd.lib.paths import ensure_session_dirs, events_path
 
     sids = []
     for suffix in ("aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"):
@@ -370,13 +370,13 @@ def test_find_most_recent_picks_newest_events_mtime(tmp_swarm_root, tmp_path):
 
 
 def test_find_most_recent_ignores_sessions_with_no_events_jsonl(tmp_swarm_root):
-    from swarm.lib.paths import ensure_session_dirs, events_path
+    from swarmd.lib.paths import ensure_session_dirs, events_path
 
     ensure_session_dirs("aaaaaaaaaaaa")
     ensure_session_dirs("bbbbbbbbbbbb")
     events_path("bbbbbbbbbbbb").write_text("{}\n")
     # a has no events.jsonl
-    from swarm.lib.paths import events_path as _ep
+    from swarmd.lib.paths import events_path as _ep
 
     _ep("aaaaaaaaaaaa").unlink(missing_ok=True)
     assert SessionSnapshot.find_most_recent() == "bbbbbbbbbbbb"
@@ -392,7 +392,7 @@ def test_snapshot_load_agrees_with_verifier_status_when_all_pass(tmp_swarm_root,
     """
     from pathlib import Path
     import shutil
-    from swarm.lib.paths import session_dir
+    from swarmd.lib.paths import session_dir
 
     evidence_dir = Path(
         "/Users/npow/.swarm/state/324da372-5986-4724-9a3d-af6b06d175f8"

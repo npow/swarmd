@@ -20,19 +20,19 @@ from pathlib import Path
 
 import yaml
 
-from swarm.lib.heartbeat import beat
-from swarm.lib.launcher_liveness import exit_if_launcher_dead
-from swarm.lib.locking import write_line
-from swarm.lib.paths import (
+from swarmd.lib.heartbeat import beat
+from swarmd.lib.launcher_liveness import exit_if_launcher_dead
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import (
     claude_transcript_path,
     ensure_session_dirs,
     findings_path,
     mission_yaml_path,
 )
-from swarm.schemas.finding import Finding
-from swarm.schemas.mission import Mission
-from swarm.specialists.goal_drift_critic import judge as drift_judge
-from swarm.specialists.progress_auditor import audit as progress_audit
+from swarmd.schemas.finding import Finding
+from swarmd.schemas.mission import Mission
+from swarmd.specialists.goal_drift_critic import judge as drift_judge
+from swarmd.specialists.progress_auditor import audit as progress_audit
 
 LOG = logging.getLogger("swarm.llm_loop")
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from swarm.hooks.on_post_tool_use import _bump_brief_counter, _observer_brief
-from swarm.lib.locking import write_line
-from swarm.lib.paths import findings_path, strikes_path
-from swarm.schemas.finding import Finding
+from swarmd.hooks.on_post_tool_use import _bump_brief_counter, _observer_brief
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import findings_path, strikes_path
+from swarmd.schemas.finding import Finding
 
 
 def test_brief_counter_increments(session_id):

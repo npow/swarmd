@@ -26,11 +26,11 @@ from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import UnsandboxedWorkflowRunner, Worker
 
-from swarm.durable.activities.goal_drift_check import GoalDriftResult
-from swarm.durable.activities.progress_audit import ProgressAuditResult
-from swarm.durable.activities.run_anticheat_dimension import AnticheatVerdict
-from swarm.durable.errors import TerminalError
-from swarm.durable.specialists import LLMCriticWorkflow
+from swarmd.durable.activities.goal_drift_check import GoalDriftResult
+from swarmd.durable.activities.progress_audit import ProgressAuditResult
+from swarmd.durable.activities.run_anticheat_dimension import AnticheatVerdict
+from swarmd.durable.errors import TerminalError
+from swarmd.durable.specialists import LLMCriticWorkflow
 
 
 # --- Shared module-level state for per-test mocks -------------------------
@@ -550,7 +550,7 @@ async def test_continue_as_new_threshold(tmp_path):
     # reads it in the cas check — importing the module again after the
     # patch would register a NEW @workflow.defn, so we monkeypatch in
     # place via the module attribute.
-    import swarm.durable.specialists.llm_critic as mod
+    import swarmd.durable.specialists.llm_critic as mod
 
     original = mod._CONTINUE_AS_NEW_CYCLE_THRESHOLD
     try:

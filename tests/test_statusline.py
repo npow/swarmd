@@ -10,13 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from swarm.lib.launcher_liveness import write_launcher_pid
-from swarm.lib.status import (
+from swarmd.lib.launcher_liveness import write_launcher_pid
+from swarmd.lib.status import (
     CriterionStatus,
     SessionSnapshot,
     SpecialistHealth,
 )
-from swarm.statusline import format_line
+from swarmd.statusline import format_line
 
 
 def _snap(**overrides) -> SessionSnapshot:
@@ -161,7 +161,7 @@ def test_wrapper_auto_mode_emits_line_for_session(tmp_swarm_root, session_id, tm
     """Given a session with a mission, --auto finds and formats it."""
     import yaml
 
-    from swarm.lib.paths import ensure_session_dirs, events_path, mission_yaml_path
+    from swarmd.lib.paths import ensure_session_dirs, events_path, mission_yaml_path
 
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -210,7 +210,7 @@ def test_wrapper_json_mode_emits_parseable_json(tmp_swarm_root, session_id):
 def test_wrapper_json_mode_valid_when_beat_has_no_timestamp(tmp_swarm_root, session_id):
     """A .beat file with no last_cycle_ts yields last_beat_age_sec=math.inf.
     The --json output must still be valid RFC 8259 JSON (no bare Infinity)."""
-    from swarm.lib.paths import health_beat_path
+    from swarmd.lib.paths import health_beat_path
 
     # Write a beat file with no timestamp — triggers math.inf path in _load_health
     beat = health_beat_path(session_id, "coordinator")
@@ -247,14 +247,14 @@ def test_statusline_accepts_session_arg(tmp_swarm_root, session_id, tmp_path):
     import unittest.mock as mock
     import yaml
 
-    from swarm.lib.paths import (
+    from swarmd.lib.paths import (
         _reset_for_tests,
         ensure_session_dirs,
         events_path,
         mission_yaml_path,
         session_dir,
     )
-    from swarm.statusline import main
+    from swarmd.statusline import main
 
     ws = tmp_path / "ws"
     ws.mkdir()

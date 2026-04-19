@@ -7,11 +7,11 @@ import time
 
 import pytest
 
-from swarm.lib.locking import write_line
-from swarm.lib.paths import findings_path, interventions_path, session_dir
-from swarm.schemas.finding import Finding
-from swarm.schemas.intervention import Intervention
-from swarm.specialists.notifier import (
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import findings_path, interventions_path, session_dir
+from swarmd.schemas.finding import Finding
+from swarmd.schemas.intervention import Intervention
+from swarmd.specialists.notifier import (
     NOTIFIER_CURSOR_FILENAME,
     format_notification,
     process_new_findings,

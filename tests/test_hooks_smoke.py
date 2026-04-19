@@ -40,7 +40,7 @@ def test_session_start_emits_event(tmp_swarm_root, session_id):
     assert "hookSpecificOutput" in out
     assert "observed" in out["hookSpecificOutput"]["additionalContext"].lower()
 
-    from swarm.specialists.event_scribe import read_events
+    from swarmd.specialists.event_scribe import read_events
 
     events = read_events(session_id)
     assert any(e.hook == "SessionStart" for e in events)
@@ -58,7 +58,7 @@ def test_post_tool_use_emits_event(tmp_swarm_root, session_id):
         },
     )
     assert r.returncode == 0, r.stderr
-    from swarm.specialists.event_scribe import read_events
+    from swarmd.specialists.event_scribe import read_events
 
     events = read_events(session_id)
     assert any(e.tool_name == "Edit" for e in events)
@@ -68,7 +68,7 @@ def _seed_mission(session_id, workspace):
     """Seed a minimal mission.yaml so the Stop hook treats this as a swarm session."""
     import yaml as _yaml
 
-    from swarm.lib.paths import mission_yaml_path
+    from swarmd.lib.paths import mission_yaml_path
 
     p = mission_yaml_path(session_id)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -112,9 +112,9 @@ def test_stop_hook_blocks_when_no_completion(tmp_swarm_root, session_id, tmp_pat
 def test_stop_hook_allows_on_mission_complete(tmp_swarm_root, session_id, tmp_path):
     _seed_mission(session_id, tmp_path)
     # Seed a mission_complete intervention
-    from swarm.lib.locking import write_line
-    from swarm.lib.paths import interventions_path
-    from swarm.schemas.intervention import Intervention
+    from swarmd.lib.locking import write_line
+    from swarmd.lib.paths import interventions_path
+    from swarmd.schemas.intervention import Intervention
 
     iv = Intervention(
         id="i-complete",

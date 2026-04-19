@@ -22,11 +22,11 @@ import subprocess
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.restart_subprocess import (
+from swarmd.durable.activities.restart_subprocess import (
     RestartResult,
     restart_subprocess,
 )
-from swarm.durable.errors import TransientError
+from swarmd.durable.errors import TransientError
 
 
 def _respawn_request(**overrides) -> dict:
@@ -66,14 +66,14 @@ async def test_happy_path_sigterm_respawn(monkeypatch):
         return (pid, 0)  # (pid, status) both nonzero means "reaped"
 
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.killpg", fake_killpg
+        "swarmd.durable.activities.restart_subprocess.os.killpg", fake_killpg
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.getpgid",
+        "swarmd.durable.activities.restart_subprocess.os.getpgid",
         fake_getpgid,
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.waitpid",
+        "swarmd.durable.activities.restart_subprocess.os.waitpid",
         fake_waitpid,
     )
 
@@ -84,7 +84,7 @@ async def test_happy_path_sigterm_respawn(monkeypatch):
         return real_popen(["sh", "-c", "exit 0"], start_new_session=True)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         fake_popen,
     )
 
@@ -113,7 +113,7 @@ async def test_sigkill_after_grace(monkeypatch):
     the activity must escalate to SIGKILL."""
     # Override the grace to make the test fast.
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.SIGTERM_GRACE_SEC",
+        "swarmd.durable.activities.restart_subprocess.SIGTERM_GRACE_SEC",
         0.2,
     )
 
@@ -130,14 +130,14 @@ async def test_sigkill_after_grace(monkeypatch):
         return (0, 0)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.killpg", fake_killpg
+        "swarmd.durable.activities.restart_subprocess.os.killpg", fake_killpg
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.getpgid",
+        "swarmd.durable.activities.restart_subprocess.os.getpgid",
         fake_getpgid,
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.waitpid",
+        "swarmd.durable.activities.restart_subprocess.os.waitpid",
         fake_waitpid,
     )
 
@@ -147,7 +147,7 @@ async def test_sigkill_after_grace(monkeypatch):
         return real_popen(["sh", "-c", "exit 0"], start_new_session=True)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         fake_popen,
     )
 
@@ -187,14 +187,14 @@ async def test_process_lookup_error_treated_as_already_dead(monkeypatch):
         return (pid, 0)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.killpg", fake_killpg
+        "swarmd.durable.activities.restart_subprocess.os.killpg", fake_killpg
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.getpgid",
+        "swarmd.durable.activities.restart_subprocess.os.getpgid",
         fake_getpgid,
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.waitpid",
+        "swarmd.durable.activities.restart_subprocess.os.waitpid",
         fake_waitpid,
     )
 
@@ -204,7 +204,7 @@ async def test_process_lookup_error_treated_as_already_dead(monkeypatch):
         return real_popen(["sh", "-c", "exit 0"], start_new_session=True)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         fake_popen,
     )
 
@@ -233,14 +233,14 @@ async def test_getpgid_process_lookup_tolerated(monkeypatch):
         return (pid, 0)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.getpgid",
+        "swarmd.durable.activities.restart_subprocess.os.getpgid",
         fake_getpgid,
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.killpg", fake_killpg
+        "swarmd.durable.activities.restart_subprocess.os.killpg", fake_killpg
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.waitpid",
+        "swarmd.durable.activities.restart_subprocess.os.waitpid",
         fake_waitpid,
     )
 
@@ -250,7 +250,7 @@ async def test_getpgid_process_lookup_tolerated(monkeypatch):
         return real_popen(["sh", "-c", "exit 0"], start_new_session=True)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         fake_popen,
     )
 
@@ -283,14 +283,14 @@ async def test_respawn_oserror_raises_transient(monkeypatch):
         return (pid, 0)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.killpg", fake_killpg
+        "swarmd.durable.activities.restart_subprocess.os.killpg", fake_killpg
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.getpgid",
+        "swarmd.durable.activities.restart_subprocess.os.getpgid",
         fake_getpgid,
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.waitpid",
+        "swarmd.durable.activities.restart_subprocess.os.waitpid",
         fake_waitpid,
     )
 
@@ -298,7 +298,7 @@ async def test_respawn_oserror_raises_transient(monkeypatch):
         raise OSError("cannot spawn on restart")
 
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         raise_oserror,
     )
 
@@ -329,14 +329,14 @@ async def test_subagent_id_preserved_across_restart(monkeypatch):
         return (pid, 0)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.killpg", fake_killpg
+        "swarmd.durable.activities.restart_subprocess.os.killpg", fake_killpg
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.getpgid",
+        "swarmd.durable.activities.restart_subprocess.os.getpgid",
         fake_getpgid,
     )
     monkeypatch.setattr(
-        "swarm.durable.activities.restart_subprocess.os.waitpid",
+        "swarmd.durable.activities.restart_subprocess.os.waitpid",
         fake_waitpid,
     )
 
@@ -348,7 +348,7 @@ async def test_subagent_id_preserved_across_restart(monkeypatch):
         return real_popen(["sh", "-c", "exit 0"], start_new_session=True)
 
     monkeypatch.setattr(
-        "swarm.durable.activities.spawn_subagent.subprocess.Popen",
+        "swarmd.durable.activities.spawn_subagent.subprocess.Popen",
         fake_popen,
     )
 

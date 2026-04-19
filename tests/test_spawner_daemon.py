@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from swarm.schemas.mission import Concurrency
-from swarm.specialists.spawner import (
+from swarmd.schemas.mission import Concurrency
+from swarmd.specialists.spawner import (
     SpawnerState,
     enqueue,
     load_tree,
@@ -28,7 +28,7 @@ def _spawner(argv: list[str], env: dict[str, str]) -> FakeProc:
 def test_run_daemon_once_drains_admitted_request(session_id):
     # Start with empty tree, enqueue a request that would ADMIT immediately
     state = SpawnerState()
-    from swarm.specialists.spawner import SpawnRequest
+    from swarmd.specialists.spawner import SpawnRequest
 
     state = enqueue(session_id, state, SpawnRequest(parent_id="root", depth=1, mission="do X"))
     c = Concurrency(max_total_live=4, max_depth=3, max_fan_out_per_parent=2)
@@ -66,7 +66,7 @@ def test_run_daemon_once_respects_budget(session_id):
             "c1": {"parent": "p1", "status": "running", "depth": 1},
         }
     )
-    from swarm.specialists.spawner import SpawnRequest
+    from swarmd.specialists.spawner import SpawnRequest
 
     state = enqueue(session_id, state, SpawnRequest(parent_id="root", depth=1, mission="queued"))
     save_tree(session_id, state)
@@ -80,7 +80,7 @@ def test_run_daemon_once_respects_budget(session_id):
 
 
 def test_run_daemon_once_handles_spawner_error(session_id):
-    from swarm.specialists.spawner import SpawnRequest
+    from swarmd.specialists.spawner import SpawnRequest
 
     state = SpawnerState()
     state = enqueue(session_id, state, SpawnRequest(parent_id="root", depth=1, mission="x"))

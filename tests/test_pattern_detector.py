@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from swarm.schemas.event import Event
-from swarm.schemas.mission import PatternThresholds
-from swarm.specialists.pattern_detector import (
+from swarmd.schemas.event import Event
+from swarmd.schemas.mission import PatternThresholds
+from swarmd.specialists.pattern_detector import (
     detect_loops,
     detect_once,
     detect_oscillation,

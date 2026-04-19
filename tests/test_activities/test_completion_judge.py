@@ -30,7 +30,7 @@ import time
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.completion_judge import (
+from swarmd.durable.activities.completion_judge import (
     CompletionDecision,
     completion_judge,
 )

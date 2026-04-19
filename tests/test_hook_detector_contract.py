@@ -5,10 +5,10 @@ of the data contract between the two components.
 
 from __future__ import annotations
 
-from swarm.hooks.on_post_tool_use import _summarize_input, _summarize_response
-from swarm.schemas.event import Event
-from swarm.schemas.mission import PatternThresholds
-from swarm.specialists.pattern_detector import (
+from swarmd.hooks.on_post_tool_use import _summarize_input, _summarize_response
+from swarmd.schemas.event import Event
+from swarmd.schemas.mission import PatternThresholds
+from swarmd.specialists.pattern_detector import (
     detect_loops,
     detect_oscillation,
     normalize_arg,

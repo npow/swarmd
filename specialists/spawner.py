@@ -22,11 +22,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from swarm.lib.ids import mint_finding_id
-from swarm.lib.locking import locked_rmw
-from swarm.lib.paths import session_dir
-from swarm.schemas.finding import Evidence, Finding
-from swarm.schemas.mission import Concurrency
+from swarmd.lib.ids import mint_finding_id
+from swarmd.lib.locking import locked_rmw
+from swarmd.lib.paths import session_dir
+from swarmd.schemas.finding import Evidence, Finding
+from swarmd.schemas.mission import Concurrency
 
 LOG = logging.getLogger("swarm.spawner")
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from swarm.specialists.goal_drift_critic import (
+from swarmd.specialists.goal_drift_critic import (
     DriftJudgement,
     _collect_inputs,
     _parse_verdict,

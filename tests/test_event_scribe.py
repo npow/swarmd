@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from swarm.lib.paths import events_path
-from swarm.specialists.event_scribe import emit_event, read_events
+from swarmd.lib.paths import events_path
+from swarmd.specialists.event_scribe import emit_event, read_events
 
 
 def test_emit_and_read(session_id):

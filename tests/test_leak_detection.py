@@ -9,8 +9,8 @@ import time
 
 import pytest
 
-from swarm.lib.paths import session_dir
-from swarm.specialists.spawner import (
+from swarmd.lib.paths import session_dir
+from swarmd.specialists.spawner import (
     SpawnerState,
     load_tree,
     mark_dead,

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import yaml
 
-from swarm.lib.paths import mission_yaml_path
-from swarm.schemas.mission import Mission
-from swarm.specialists.llm_loop import CycleResult, one_cycle
+from swarmd.lib.paths import mission_yaml_path
+from swarmd.schemas.mission import Mission
+from swarmd.specialists.llm_loop import CycleResult, one_cycle
 
 
 def _write_mission(session_id, workspace):

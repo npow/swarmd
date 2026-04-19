@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from swarm.lib.ids import mint_finding_id
-from swarm.lib.transcript import last_n_turns
-from swarm.schemas.finding import Evidence, Finding
+from swarmd.lib.ids import mint_finding_id
+from swarmd.lib.transcript import last_n_turns
+from swarmd.schemas.finding import Evidence, Finding
 
 LOG = logging.getLogger("swarm.goal_drift_critic")
 

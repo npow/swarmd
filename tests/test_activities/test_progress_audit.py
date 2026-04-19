@@ -46,11 +46,11 @@ import pytest
 from anthropic import APIStatusError, AuthenticationError, RateLimitError
 from temporalio.testing import ActivityEnvironment
 
-from swarm.durable.activities.progress_audit import (
+from swarmd.durable.activities.progress_audit import (
     ProgressAuditResult,
     progress_audit,
 )
-from swarm.durable.errors import AuthError, TerminalError, TransientError
+from swarmd.durable.errors import AuthError, TerminalError, TransientError
 
 
 def _make_mock_anthropic(text: str) -> MagicMock:
@@ -95,7 +95,7 @@ async def test_happy_path_fabricated():
             }
         )
     )
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(progress_audit, _context())
 
@@ -122,7 +122,7 @@ async def test_happy_path_grounded():
             }
         )
     )
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(progress_audit, _context())
 
@@ -147,7 +147,7 @@ async def test_partial_verdict_is_major_severity():
             }
         )
     )
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(progress_audit, _context())
 
@@ -170,7 +170,7 @@ async def test_unclear_verdict_returned():
             }
         )
     )
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         res = await env.run(progress_audit, _context())
 
@@ -183,7 +183,7 @@ async def test_malformed_json_raises_terminal():
     """Malformed JSON from the model → ``TerminalError``. Retries won't
     turn nonsense into valid JSON, so Temporal should fail fast."""
     mock_ctor = _make_mock_anthropic("not valid json at all <<<>>>")
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(TerminalError):
             await env.run(progress_audit, _context())
@@ -202,7 +202,7 @@ async def test_bad_verdict_value_raises_terminal():
             }
         )
     )
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(TerminalError):
             await env.run(progress_audit, _context())
@@ -227,7 +227,7 @@ async def test_rate_limit_raises_transient():
     )
     mock_ctor = MagicMock(return_value=mock_client)
 
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(TransientError):
             await env.run(progress_audit, _context())
@@ -241,7 +241,7 @@ async def test_overloaded_raises_transient():
     mock_client.messages.create.side_effect = _make_api_status_error(424)
     mock_ctor = MagicMock(return_value=mock_client)
 
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(TransientError):
             await env.run(progress_audit, _context())
@@ -257,7 +257,7 @@ async def test_auth_error_raises_terminal():
     )
     mock_ctor = MagicMock(return_value=mock_client)
 
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         with pytest.raises(AuthError):
             await env.run(progress_audit, _context())
@@ -272,7 +272,7 @@ async def test_model_id_is_haiku():
             {"verdict": "grounded", "unsupported_claims": [], "reason": "ok"}
         )
     )
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         await env.run(progress_audit, _context())
 
@@ -298,7 +298,7 @@ async def test_context_content_passed_into_prompt():
             }
         )
     )
-    with patch("swarm.durable.activities.progress_audit.Anthropic", mock_ctor):
+    with patch("swarmd.durable.activities.progress_audit.Anthropic", mock_ctor):
         env = ActivityEnvironment()
         await env.run(progress_audit, ctx)
 

@@ -18,8 +18,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from swarm.classifier import ClassifierResult, ClassifierVerdict
-from swarm.durable.errors import TransientError
+from swarmd.classifier import ClassifierResult, ClassifierVerdict
+from swarmd.durable.errors import TransientError
 
 # Load the hook module directly by path. We can't use ``import
 # swarm.hooks.user_prompt_submit`` here because under pytest the top-level
@@ -30,7 +30,7 @@ from swarm.durable.errors import TransientError
 # location instead, so the test exercises the exact module under test.
 _HOOK_PATH = (
     Path(__file__).resolve().parents[2]
-    / "swarm"
+    / "swarmd"
     / "hooks"
     / "user_prompt_submit.py"
 )

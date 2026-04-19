@@ -6,11 +6,11 @@ import json
 import time
 from dataclasses import dataclass
 
-from swarm.lib.heartbeat import beat
-from swarm.lib.locking import write_line
-from swarm.lib.paths import findings_path, health_beat_path
-from swarm.schemas.finding import Finding
-from swarm.specialists.supervisor import (
+from swarmd.lib.heartbeat import beat
+from swarmd.lib.locking import write_line
+from swarmd.lib.paths import findings_path, health_beat_path
+from swarmd.schemas.finding import Finding
+from swarmd.specialists.supervisor import (
     DEFAULT_SPECIALISTS,
     ROTATION_EXHAUSTION_K,
     HealthStatus,

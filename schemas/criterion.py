@@ -18,7 +18,7 @@ from __future__ import annotations
 # ``swarm/schemas/`` directories). Reaching for the ``SuccessCriterion`` via
 # the fully-qualified ``swarm.schemas.mission`` path works regardless of
 # which namespace contributor ``schemas/mission.py`` lives in.
-from swarm.schemas.mission import SuccessCriterion
+from swarmd.schemas.mission import SuccessCriterion
 
 # Public single-purpose name. Keep the alias tight: downstream code imports
 # ``Criterion`` exclusively from this module, regardless of how the type is

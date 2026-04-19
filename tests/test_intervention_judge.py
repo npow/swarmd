@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from swarm.schemas.finding import Evidence, Finding
-from swarm.specialists.intervention_judge import (
+from swarmd.schemas.finding import Evidence, Finding
+from swarmd.specialists.intervention_judge import (
     ESCAPE_LADDER,
     InterventionDecision,
     decide,
