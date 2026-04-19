@@ -18,11 +18,11 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from swarm.lib import llm_client
 from swarm.lib.ids import mint_finding_id
 from swarm.schemas.finding import Evidence, Finding
 
@@ -54,20 +54,9 @@ LLMRunner = Callable[[str], str]
 
 def default_llm_runner(prompt: str) -> str:
     try:
-        proc = subprocess.run(
-            ["claude", "-p", "--model", "opus"],
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-        if proc.returncode == 0:
-            return proc.stdout.strip()
-        return json.dumps({"verdict": "UNCLEAR", "reason": f"rc={proc.returncode}"})
-    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-        return json.dumps(
-            {"verdict": "UNCLEAR", "reason": f"llm_unavailable: {type(e).__name__}"}
-        )
+        return llm_client.call(prompt)
+    except llm_client.LLMError:
+        return ""
 
 
 _DIMENSION_PROMPTS = {

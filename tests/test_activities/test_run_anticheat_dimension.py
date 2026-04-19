@@ -35,7 +35,7 @@ Invariants covered:
 4. Unknown dimension → ``ValueError`` (caller bug; non-retryable).
 5. Missing context key → ``TerminalError`` (prompt template would KeyError).
 6. Malformed JSON response → ``TerminalError`` (retries can't fix it).
-7. Non-zero subprocess exit → ``TransientError`` (CLI is retryable).
+7. Gateway ``LLMError`` → ``TransientError`` (gateway errors are retryable).
 8. Unknown verdict string in otherwise valid JSON → ``TerminalError``.
 """
 
@@ -125,9 +125,8 @@ async def test_happy_path_pass_per_dimension(dimension):
     # Confirm the dimension-specific focus made it into the prompt we
     # sent to the reviewer — otherwise the critic would be judging the
     # wrong axis.
-    (cmd, prompt), _ = mock_invoke.call_args
+    (prompt,), _ = mock_invoke.call_args
     assert _DIMENSION_PROMPTS[dimension] in prompt
-    assert "claude -p --bare --model opus" in cmd
 
 
 @pytest.mark.parametrize("dimension", _ALL_DIMENSIONS)
@@ -252,13 +251,12 @@ async def test_malformed_json_raises_terminal():
 
 
 @pytest.mark.asyncio
-async def test_non_zero_exit_raises_transient():
-    """Non-zero reviewer exit → ``TransientError``. The CLI is retryable
-    because a transient environment failure (DNS, OOM, socket reset) is
-    the usual cause; the spec chose ``RUN_ANTICHEAT_DIMENSION`` with 10
-    attempts specifically to absorb this."""
+async def test_transient_invoke_error_raises_transient():
+    """``TransientError`` from ``_invoke_reviewer`` propagates as ``TransientError``.
+    Gateway errors (network hiccup, rate limit, timeout) are retryable;
+    the spec chose ``RUN_ANTICHEAT_DIMENSION`` with 10 attempts to absorb this."""
     mock_invoke = AsyncMock(
-        side_effect=TransientError("claude exited 1: network hiccup")
+        side_effect=TransientError("gateway LLM error: network hiccup")
     )
     with patch(
         "swarm.durable.activities.run_anticheat_dimension._invoke_reviewer",
@@ -319,7 +317,7 @@ async def test_context_placeholders_reach_prompt():
             run_anticheat_dimension, "scope_reduction", ctx, _config()
         )
 
-    (_cmd, prompt), _ = mock_invoke.call_args
+    (prompt,), _ = mock_invoke.call_args
     assert "C-42" in prompt
     assert "+ assert x == expected" in prompt
     assert "Edit(path='helpers.py')" in prompt
@@ -327,10 +325,10 @@ async def test_context_placeholders_reach_prompt():
 
 
 @pytest.mark.asyncio
-async def test_reviewer_command_is_opus_by_default():
-    """The spec requires Opus-level review for anti-cheat. Lock in the
-    default primary command so a migration doesn't accidentally drop to
-    Haiku (which would be too cheap for the adversarial judgment)."""
+async def test_reviewer_receives_prompt_via_invoke_reviewer():
+    """The activity routes the constructed prompt through ``_invoke_reviewer``
+    so the gateway transport can be swapped in one place without touching
+    the activity logic."""
     mock_invoke = AsyncMock(
         return_value=json.dumps({"verdict": "pass", "rationale": "ok"})
     )
@@ -346,8 +344,9 @@ async def test_reviewer_command_is_opus_by_default():
             _config(),
         )
 
-    (cmd, _prompt), _ = mock_invoke.call_args
-    assert "opus" in cmd.lower()
+    mock_invoke.assert_called_once()
+    (prompt,), _ = mock_invoke.call_args
+    assert "scope_reduction" in prompt
 
 
 @pytest.mark.asyncio

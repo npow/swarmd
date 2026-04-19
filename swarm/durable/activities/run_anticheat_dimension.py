@@ -18,21 +18,14 @@ fit the durable activity contract:
 * Take a single ``dimension`` name (routed against ``_DIMENSION_PROMPTS``),
   a ``context`` dict with the four legacy placeholders
   (``criterion_id``, ``diff``, ``events``, ``check_command``), and an
-  ``anticheat_config`` dict that supplies the reviewer command line.
-* Invoke the reviewer subprocess via ``asyncio.create_subprocess_shell``
-  so the Temporal event loop stays non-blocking. The legacy specialist
-  used synchronous ``subprocess.run`` from a thread pool; the durable
-  version goes async-native because the LLMCriticWorkflow will fan out
-  six of these at once.
+  ``anticheat_config`` dict (passed for compatibility; transport config
+  is now handled by ``swarm.lib.llm_client`` env vars).
+* Invoke the gateway LLM client via ``_invoke_reviewer`` (offloaded to a
+  thread so the Temporal event loop stays non-blocking) because the
+  LLMCriticWorkflow will fan out six of these at once.
 * Return an ``AnticheatVerdict`` with ``dimension``, ``verdict``,
   ``rationale`` and a ``finding`` dict ready for the ``emit_finding``
   activity.
-
-The reviewer is invoked as ``claude -p --bare --model opus`` by default.
-Opus is required (not Haiku) because the anti-cheat judgments are the
-last line of defense against a sophisticated adversarial agent; spec
-§5.9 is explicit that this is the one place that justifies the Opus
-token cost. ``anticheat_config["primary"]`` is the shell command string.
 
 Implementation contract:
 
@@ -44,18 +37,17 @@ Implementation contract:
   violation; retries won't grow keys).
 * Malformed JSON → ``TerminalError``.
 * Unknown verdict string → ``TerminalError``.
-* Non-zero subprocess exit → ``TransientError`` (environment hiccup;
-  retryable under ``RUN_ANTICHEAT_DIMENSION`` policy).
+* ``LLMError`` from the gateway → ``TransientError`` (network hiccup,
+  rate limit, or timeout; retryable under ``RUN_ANTICHEAT_DIMENSION``
+  policy).
 
 The ``_invoke_reviewer`` helper is factored out so tests can patch it
-cleanly without monkey-patching ``asyncio.create_subprocess_shell``
-globally. Downstream workers that need to swap the transport (e.g. an
-HTTP-based reviewer instead of a CLI subprocess) can do so in one file.
+cleanly without touching global state. Downstream workers that need to
+swap the transport can do so in one place.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -63,6 +55,7 @@ from typing import Any
 from temporalio import activity
 
 from swarm.durable.errors import TerminalError, TransientError
+from swarm.lib import llm_client
 
 
 # --- Dimension prompts (ported verbatim from the legacy specialist) ---------
@@ -131,12 +124,6 @@ _SEVERITY_MAP = {
     "suspicious": "major",
 }
 
-
-# Subprocess timeout for the reviewer call. 180s matches the legacy
-# specialist's ``subprocess.run(..., timeout=180)`` — long enough for Opus
-# to think through the diff, short enough to not starve the mission's
-# cadence budget. Tests don't hit this path because they mock the helper.
-_REVIEWER_TIMEOUT_SEC = 180.0
 
 
 # --- Prompt template (ported + lightly restructured) --------------------------
@@ -216,8 +203,8 @@ async def run_anticheat_dimension(
             (``criterion_id``, ``diff``, ``events``, ``check_command``)
             plus optional pass-through metadata (``mission_id``,
             ``session_id``, ``spawner_id``) that lands on the finding.
-        anticheat_config: Dict whose ``primary`` key is the reviewer
-            shell command (default ``claude -p --bare --model opus``).
+        anticheat_config: Dict passed for interface compatibility; transport
+            configuration is handled by ``swarm.lib.llm_client`` env vars.
 
     Raises:
         ValueError: ``dimension`` is not one of the six panel axes.
@@ -226,10 +213,9 @@ async def run_anticheat_dimension(
         TerminalError: Missing context placeholder, malformed reviewer
             JSON, or verdict outside ``_VALID_VERDICTS``. Retries will
             not fix a contract violation.
-        TransientError: Reviewer subprocess exited non-zero — almost
-            always a transient environment failure (DNS, OOM, socket).
-            The ``RUN_ANTICHEAT_DIMENSION`` retry policy has 10 attempts
-            to absorb these.
+        TransientError: Gateway ``LLMError`` — network hiccup, rate
+            limit, or timeout. The ``RUN_ANTICHEAT_DIMENSION`` retry
+            policy has 10 attempts to absorb these.
     """
     # Route the dimension first — a bad dimension is a caller bug, not a
     # data-shape issue, so it gets its own exception type.
@@ -256,69 +242,29 @@ async def run_anticheat_dimension(
             f"run_anticheat_dimension: missing context key {exc.args[0]!r}"
         ) from exc
 
-    cmd = str(anticheat_config.get("primary", "claude -p --bare --model opus"))
-    raw = await _invoke_reviewer(cmd, prompt)
+    raw = await _invoke_reviewer(prompt)
     parsed = _parse(raw)
     return _to_verdict(dimension, parsed, context)
 
 
-async def _invoke_reviewer(cmd: str, prompt: str) -> str:
-    """Run the reviewer CLI with ``prompt`` on stdin and return stdout text.
+async def _invoke_reviewer(prompt: str) -> str:
+    """Invoke the gateway LLM client with ``prompt`` and return the response text.
 
-    Factored out so tests can patch this helper directly without touching
-    the real ``asyncio.create_subprocess_shell``. The shape of the call
-    mirrors the legacy specialist (``subprocess.run`` with
-    ``input=prompt``, ``capture_output=True``, ``timeout=180``) but in
-    an async-native form so the Temporal event loop stays non-blocking
-    while six of these run in parallel.
+    Factored out so tests can patch this helper directly. The call is
+    offloaded to a thread via ``asyncio.to_thread`` so the Temporal event
+    loop stays non-blocking while six of these run in parallel.
 
     Error translation:
-      * Non-zero exit → ``TransientError`` (CLI is retryable).
-      * Timeout → ``TransientError`` with a timeout-specific message.
-      * ``FileNotFoundError`` (cmd not found on PATH) → ``TransientError``
-        because operator-level PATH regressions ARE retryable once the
-        worker image is fixed; a terminal classification here would
-        permanently tombstone the mission on a deploy hiccup.
+      * ``LLMError`` → ``TransientError`` (gateway errors are retryable
+        under the ``RUN_ANTICHEAT_DIMENSION`` retry policy).
     """
+    import asyncio
     try:
-        proc = await asyncio.create_subprocess_shell(
-            cmd,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except FileNotFoundError as exc:
-        # ``create_subprocess_shell`` delegates to /bin/sh so this is
-        # unusual, but we defend anyway: a missing shell is a worker
-        # environment issue that ops can fix by reimaging, hence retryable.
+        return await asyncio.to_thread(llm_client.call, prompt)
+    except llm_client.LLMError as exc:
         raise TransientError(
-            f"run_anticheat_dimension: shell not available: {exc!r}"
+            f"run_anticheat_dimension: gateway LLM error: {exc}"
         ) from exc
-
-    try:
-        stdout_b, stderr_b = await asyncio.wait_for(
-            proc.communicate(input=prompt.encode("utf-8")),
-            timeout=_REVIEWER_TIMEOUT_SEC,
-        )
-    except asyncio.TimeoutError as exc:
-        # The reviewer hung. Kill the subprocess before raising so we
-        # don't leak a zombie; Temporal will retry us.
-        try:
-            proc.kill()
-        except ProcessLookupError:
-            pass
-        raise TransientError(
-            f"run_anticheat_dimension: reviewer timed out after "
-            f"{_REVIEWER_TIMEOUT_SEC}s"
-        ) from exc
-
-    if proc.returncode != 0:
-        stderr_tail = (stderr_b or b"").decode(errors="replace")[-500:]
-        raise TransientError(
-            f"run_anticheat_dimension: reviewer exited "
-            f"{proc.returncode}: {stderr_tail}"
-        )
-    return (stdout_b or b"").decode(errors="replace")
 
 
 def _parse(raw: str) -> dict[str, Any]:

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 from swarm.specialists.anticheat_critic_panel import (
     TAXONOMY,
     CriticVerdict,
     _parse,
+    default_llm_runner,
     is_transition_genuine,
     run_panel,
 )
@@ -194,3 +196,22 @@ def test_is_transition_genuine_one_fails():
 def test_is_transition_genuine_empty_is_false():
     # Empty panel = no confirmation = not genuine
     assert is_transition_genuine([]) is False
+
+
+# --- default_llm_runner gateway client contract ---
+
+
+def test_default_runner_uses_gateway_client():
+    """default_llm_runner must delegate to swarm.lib.llm_client.call, not subprocess."""
+    with patch("swarm.lib.llm_client.call", return_value='{"verdict": "GENUINE_FIX", "citations": [], "reason": "ok"}') as mock_call:
+        result = default_llm_runner("test prompt")
+    mock_call.assert_called_once_with("test prompt")
+    assert result == '{"verdict": "GENUINE_FIX", "citations": [], "reason": "ok"}'
+
+
+def test_default_runner_returns_empty_on_LLMError():
+    """When llm_client.call raises LLMError, default_llm_runner returns '' (UNCLEAR)."""
+    from swarm.lib.llm_client import LLMError
+    with patch("swarm.lib.llm_client.call", side_effect=LLMError("gateway down")):
+        result = default_llm_runner("test prompt")
+    assert result == ""
