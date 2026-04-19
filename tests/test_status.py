@@ -229,7 +229,7 @@ def test_load_hold_sec_computed_from_verifier_ts_when_all_pass(
 
 from swarmd.lib.locking import write_line
 from swarmd.lib.paths import findings_path, interventions_path, interventions_acked_path
-from swarmd.schemas.finding import Evidence, Finding
+from swarmd.schemas.finding import Finding
 from swarmd.schemas.intervention import Intervention
 
 

@@ -43,7 +43,6 @@ from mcp.server.fastmcp import FastMCP
 from temporalio.client import Client
 
 from swarmd.durable.errors import (
-    AuthError,
     TerminalError,
     TransientError,
     classify_http_status,

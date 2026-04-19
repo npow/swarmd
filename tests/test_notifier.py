@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import time
 
-import pytest
 
 from swarmd.lib.locking import write_line
-from swarmd.lib.paths import findings_path, interventions_path, session_dir
+from swarmd.lib.paths import findings_path, session_dir
 from swarmd.schemas.finding import Finding
 from swarmd.schemas.intervention import Intervention
 from swarmd.specialists.notifier import (
     NOTIFIER_CURSOR_FILENAME,
     format_notification,
     process_new_findings,
-    process_new_interventions,
     should_notify_finding,
     should_notify_intervention,
 )

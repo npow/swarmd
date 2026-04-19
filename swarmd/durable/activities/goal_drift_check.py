@@ -42,7 +42,7 @@ from typing import Any
 from anthropic import Anthropic, APIStatusError
 from temporalio import activity
 
-from swarmd.durable.errors import TerminalError, TransientError, classify_http_status
+from swarmd.durable.errors import TerminalError, classify_http_status
 
 # Same Haiku pin used by ``progress_audit`` — both activities run on the
 # same cadence budget and share the cheap-model choice per spec §6.2.

@@ -55,7 +55,6 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
-import uuid
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable

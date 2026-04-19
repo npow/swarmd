@@ -32,11 +32,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
-import os
-import signal
 import subprocess
-import time
-from pathlib import Path
 
 import pytest
 from temporalio.testing import ActivityEnvironment

@@ -5,12 +5,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 
-import pytest
 
-from swarmd.lib.launcher_liveness import write_launcher_pid
 from swarmd.lib.status import (
     CriterionStatus,
     SessionSnapshot,

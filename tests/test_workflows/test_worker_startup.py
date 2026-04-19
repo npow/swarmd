@@ -17,8 +17,6 @@ don't crash the process.
 
 from __future__ import annotations
 
-import asyncio
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,11 +24,6 @@ from temporalio.activity import _Definition as _ActivityDefinition
 from temporalio.contrib.pydantic import pydantic_data_converter
 
 from swarmd.durable import worker as worker_mod
-from swarmd.durable.specialists import (
-    LLMCriticWorkflow,
-    PatternDetectorWorkflow,
-    ResourceMonitorWorkflow,
-)
 from swarmd.durable.worker import (
     ACTIVITIES,
     DEFAULT_HOST,
@@ -39,7 +32,6 @@ from swarmd.durable.worker import (
     cli_main,
     main,
 )
-from swarmd.durable.workflow import MissionWorkflow
 
 
 # ---------------------------------------------------------------------------

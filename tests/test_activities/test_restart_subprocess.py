@@ -15,7 +15,6 @@ The tests monkeypatch ``os.killpg``, ``os.getpgid``, ``os.waitpid``, and
 
 from __future__ import annotations
 
-import os
 import signal
 import subprocess
 

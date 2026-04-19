@@ -46,7 +46,7 @@ from typing import Any
 from anthropic import Anthropic, APIStatusError
 from temporalio import activity
 
-from swarmd.durable.errors import TerminalError, TransientError, classify_http_status
+from swarmd.durable.errors import TerminalError, classify_http_status
 
 # Haiku is the cadence specialist — cheap enough to run on a fixed timer
 # without wrecking the mission's budget. The exact model ID is pinned per the

@@ -48,7 +48,6 @@ from anthropic import Anthropic, APIStatusError
 from swarmd.classifier.prompts import CLASSIFIER_PROMPT
 from swarmd.classifier.rules import ClassifierResult, ClassifierVerdict
 from swarmd.durable.errors import (
-    AuthError,
     TerminalError,
     TransientError,
     classify_http_status,

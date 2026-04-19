@@ -9,7 +9,6 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import patch
 
-import pytest
 
 from swarmd.lib import notify_os
 
