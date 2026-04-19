@@ -1,7 +1,15 @@
-"""Gateway LLM client for the swarm project.
+"""Anthropic LLM client for the swarm project.
 
 Wraps the Anthropic SDK with env-var config, exponential backoff retries,
 and a simple text-extraction interface.
+
+Configure via env vars:
+- ``ANTHROPIC_API_KEY``   — required unless ``ANTHROPIC_BASE_URL`` points at a
+                            proxy that injects auth.
+- ``ANTHROPIC_BASE_URL``  — optional override for SDK base URL (proxies, etc).
+                            Unset → SDK default (api.anthropic.com).
+- ``ANTHROPIC_MODEL``     — optional model override; default is the Sonnet
+                            identifier below.
 """
 
 from __future__ import annotations
@@ -15,8 +23,9 @@ import anthropic
 # Defaults
 # ---------------------------------------------------------------------------
 
-_DEFAULT_BASE_URL = "http://mgp.local.dev.netflix.net:9123/proxy/npowws"
-_DEFAULT_API_KEY = "sk-dummy"
+# Empty string → SDK uses its own default (api.anthropic.com).
+_DEFAULT_BASE_URL = ""
+_DEFAULT_API_KEY = ""
 _DEFAULT_MODEL = "claude-sonnet-4-6"
 
 # Retry config: max 3 retries = 4 total attempts; backoff 1s, 2s, 4s
@@ -61,7 +70,13 @@ def call(
     api_key = os.environ.get("ANTHROPIC_API_KEY", _DEFAULT_API_KEY)
     resolved_model = model or os.environ.get("SWARM_LLM_MODEL", _DEFAULT_MODEL)
 
-    client = anthropic.Anthropic(base_url=base_url, api_key=api_key)
+    # Pass kwargs only when non-empty so the SDK falls back to its own defaults.
+    client_kwargs: dict = {}
+    if base_url:
+        client_kwargs["base_url"] = base_url
+    if api_key:
+        client_kwargs["api_key"] = api_key
+    client = anthropic.Anthropic(**client_kwargs)
 
     kwargs: dict = {
         "model": resolved_model,
