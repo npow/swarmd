@@ -41,3 +41,18 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = [".."]
 addopts = "--import-mode=importlib"
+
+[tool.ruff]
+# Legacy pre-Temporal code and tests for deleted modules live in the repo
+# alongside the new package. Exclude them from lint so CI reflects current
+# code quality, not pre-rewrite cruft.
+extend-exclude = [
+    "swarmd/lib/status.py",
+    "tests/test_status.py",
+    "tests/test_llm_client.py",
+    "tests/test_deep_qa_cli.py",
+]
+
+[tool.ruff.lint]
+# E741 (ambiguous variable name `l`) is cosmetic in list comprehensions.
+ignore = ["E741"]
