@@ -1,0 +1,49 @@
+# Refactor a module while keeping behavior identical.
+#
+# Use this when you want structural changes (split a god-class, extract a
+# helper, rename for clarity) but NO behavior change. The agent can touch
+# the production code freely but criteria enforce: (a) existing tests all
+# pass, (b) the public API surface is unchanged, (c) the refactor actually
+# reduced code, not just shuffled it.
+
+mission: |
+  The class `UserService` in `src/user_service.py` has grown to ~800 lines and
+  handles auth, profile, notification, and billing concerns. Split it into
+  focused classes (`AuthService`, `ProfileService`, `NotificationService`,
+  `BillingService`). The existing public methods on `UserService` must still
+  work — keep it as a thin facade that delegates. Do not change any method
+  signatures or behavior. Do not modify tests.
+
+workspace: "/abs/path/to/your/project"
+
+success_criteria:
+  - id: tests_still_pass
+    description: "The full suite is still green after refactor"
+    check: "pytest -q"
+    timeout_sec: 300
+
+  - id: public_api_unchanged
+    description: "UserService public method names are identical to the starting set"
+    # Replace the list below with `grep -oP 'def \w+' src/user_service.py | sort -u`
+    # run against the original file, committed to a file for comparison.
+    check: "diff <(grep -oP 'def \\w+' src/user_service.py | grep -v '^def _' | sort -u) tests/.user_service_api.txt"
+    timeout_sec: 5
+
+  - id: user_service_shrunk
+    description: "UserService is now small — facade, not monolith"
+    check: "test $(wc -l < src/user_service.py) -lt 200"
+    timeout_sec: 5
+
+  - id: new_modules_exist
+    description: "The refactor actually created the expected service classes"
+    check: "test -f src/auth_service.py && test -f src/profile_service.py && test -f src/notification_service.py && test -f src/billing_service.py"
+    timeout_sec: 5
+
+verification:
+  run_every_sec: 30
+  hold_window_sec: 90
+
+invariants:
+  # Refuse if tests were modified during the refactor.
+  tamper_sha:
+    - path: tests/

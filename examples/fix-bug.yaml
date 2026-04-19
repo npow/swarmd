@@ -1,0 +1,42 @@
+# Fix a failing test without editing the test itself.
+#
+# Use this when a user (or CI) has authored a regression test that currently
+# fails, and you want the agent to fix the production code to make it pass.
+# The anti-cheat criterion ensures the agent didn't just delete or neuter
+# the failing test.
+
+mission: |
+  The test `tests/test_auth.py::test_rejects_expired_jwt` is failing. Fix the
+  bug in `src/auth.py` so the test passes. Do not modify the test. Do not
+  weaken assertions. Keep the rest of the test suite green.
+
+workspace: "/abs/path/to/your/project"
+
+success_criteria:
+  # Happy path: the specific failing test now passes.
+  - id: target_test_passes
+    description: "The previously-failing auth test passes"
+    check: "pytest tests/test_auth.py::test_rejects_expired_jwt -x -q"
+    timeout_sec: 60
+
+  # Anti-regression: the whole suite still passes.
+  - id: full_suite_passes
+    description: "No other tests were broken by the fix"
+    check: "pytest -q"
+    timeout_sec: 300
+
+  # Anti-cheat: the test file has as many assertions as it started with.
+  # Adjust the number to match your starting count.
+  - id: assertion_floor
+    description: "Assertions were not removed from the test"
+    check: "test $(grep -c 'assert ' tests/test_auth.py) -ge 12"
+    timeout_sec: 5
+
+verification:
+  run_every_sec: 20
+  hold_window_sec: 60
+
+invariants:
+  # Refuse completion if the test file was modified at all.
+  tamper_sha:
+    - path: tests/test_auth.py

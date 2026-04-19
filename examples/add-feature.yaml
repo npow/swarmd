@@ -1,0 +1,52 @@
+# Implement a new module with real tests and no mocks of the subject.
+#
+# Use this when you want a new feature added from scratch. The mission prose
+# is the spec; the criteria enforce that the agent actually writes real code
+# (not stubs), real tests (not `def test_ok(): pass`), and doesn't mock out
+# the very module it's supposed to be building.
+
+mission: |
+  Implement a rate limiter at `src/rate_limiter.py` with this interface:
+
+      class RateLimiter:
+          def __init__(self, max_calls: int, window_sec: float): ...
+          def check(self, key: str) -> bool: ...   # True if under limit
+
+  Use a sliding window. Thread-safe. Add tests at `tests/test_rate_limiter.py`
+  covering: normal allow, deny-after-limit, window expiry, concurrent access.
+
+workspace: "/abs/path/to/your/project"
+
+success_criteria:
+  - id: tests_pass
+    description: "Tests exist and all pass"
+    check: "pytest tests/test_rate_limiter.py -x -q"
+    timeout_sec: 120
+
+  - id: test_count_floor
+    description: "At least 4 tests authored (normal, deny, expiry, concurrency)"
+    check: "test $(grep -c '^def test_' tests/test_rate_limiter.py) -ge 4"
+    timeout_sec: 5
+
+  - id: no_stubs
+    description: "Implementation has no pass-stubs, TODOs, or NotImplementedError"
+    check: "! grep -rE '^\\s*(pass|TODO|NotImplementedError)' src/rate_limiter.py"
+    timeout_sec: 5
+
+  - id: no_self_mock
+    description: "Tests do not mock the RateLimiter class itself"
+    check: "! grep -E 'mock.*RateLimiter|patch.*RateLimiter' tests/test_rate_limiter.py"
+    timeout_sec: 5
+
+  - id: type_check
+    description: "mypy --strict passes on the new module"
+    check: "mypy --strict src/rate_limiter.py"
+    timeout_sec: 60
+
+verification:
+  run_every_sec: 30
+  hold_window_sec: 60
+
+concurrency:
+  max_total_live: 4
+  max_depth: 2
