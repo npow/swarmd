@@ -62,13 +62,17 @@ def _make_mock_temporal_client(
       ``signal`` methods are AsyncMocks (configurable to raise).
     """
     client = MagicMock()
+    client.namespace = "default"
     client.start_workflow = AsyncMock(
         return_value=MagicMock(id="mission-abc123")
     )
 
     describe_resp = MagicMock()
     describe_resp.pollers = [MagicMock() for _ in range(pollers)]
-    client.describe_task_queue = AsyncMock(return_value=describe_resp)
+    client.workflow_service = MagicMock()
+    client.workflow_service.describe_task_queue = AsyncMock(
+        return_value=describe_resp
+    )
 
     handle = MagicMock()
     if query_raises is not None:

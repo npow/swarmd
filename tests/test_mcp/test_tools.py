@@ -132,9 +132,10 @@ class _MockTemporalClient:
     """Stand-in for ``temporalio.client.Client``.
 
     Matches just the surface we exercise: ``start_workflow``,
-    ``describe_task_queue``, ``get_workflow_handle``. The ``pollers``
-    attribute controls the worker-present probe; the ``not_found`` flag
-    controls whether the handle's query raises a not-found-style error.
+    ``workflow_service.describe_task_queue``, ``get_workflow_handle``.
+    The ``pollers`` attribute controls the worker-present probe; the
+    ``not_found`` flag controls whether the handle's query raises a
+    not-found-style error.
     """
 
     def __init__(
@@ -146,12 +147,16 @@ class _MockTemporalClient:
         self.pollers = pollers
         self.query_result = query_result or {"phase": "running"}
         self.query_raises = query_raises
+        self.namespace = "default"
         self.start_workflow = AsyncMock(return_value=MagicMock())
-        # The pollers attribute is read via getattr(resp, "pollers", None);
-        # we return a simple object carrying the configured count.
+        # describe_task_queue lives on client.workflow_service since
+        # temporalio>=1.26; the high-level shortcut was removed.
         describe_resp = MagicMock()
         describe_resp.pollers = [MagicMock()] * pollers
-        self.describe_task_queue = AsyncMock(return_value=describe_resp)
+        self.workflow_service = MagicMock()
+        self.workflow_service.describe_task_queue = AsyncMock(
+            return_value=describe_resp
+        )
 
     def get_workflow_handle(self, workflow_id: str) -> MagicMock:
         handle = MagicMock()

@@ -61,6 +61,8 @@ from typing import Any, Callable
 
 import click
 import yaml
+from temporalio.api.taskqueue.v1 import TaskQueue
+from temporalio.api.workflowservice.v1 import DescribeTaskQueueRequest
 from temporalio.client import Client
 
 from swarmd.durable.errors import TerminalError, TransientError
@@ -348,7 +350,11 @@ async def health() -> None:
         rows.append(("Worker liveness", "FAIL", "temporal unreachable"))
     else:
         try:
-            resp = await temporal_client.describe_task_queue(_TASK_QUEUE)
+            req = DescribeTaskQueueRequest(
+                namespace=temporal_client.namespace,
+                task_queue=TaskQueue(name=_TASK_QUEUE),
+            )
+            resp = await temporal_client.workflow_service.describe_task_queue(req)
             pollers = getattr(resp, "pollers", None) or []
             try:
                 n = len(pollers)

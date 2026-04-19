@@ -40,6 +40,8 @@ from typing import Any
 import yaml
 from anthropic import Anthropic, APIStatusError
 from mcp.server.fastmcp import FastMCP
+from temporalio.api.taskqueue.v1 import TaskQueue
+from temporalio.api.workflowservice.v1 import DescribeTaskQueueRequest
 from temporalio.client import Client
 
 from swarmd.durable.errors import (
@@ -426,19 +428,22 @@ async def _count_pollers(client: Any, task_queue: str) -> int:
 
     Returns 0 on any describe error rather than raising — a failed
     describe should surface as "no worker" to the user, not a mysterious
-    exception. If the Temporal client happens to not expose
-    ``describe_task_queue`` (older SDKs) we conservatively return a
-    positive count so launch isn't blocked by an SDK mismatch.
-    """
-    describe = getattr(client, "describe_task_queue", None)
-    if describe is None:
-        # SDK doesn't expose the probe; assume worker is healthy. The
-        # mission will simply not progress if no poller shows up, but
-        # that's a visible failure mode at runtime.
-        return 1
+    exception.
 
+    Uses the low-level gRPC call because the high-level
+    ``Client.describe_task_queue`` helper was removed in temporalio>=1.26.
+    """
     try:
-        resp = await describe(task_queue)
+        service = client.workflow_service
+    except AttributeError:
+        return 0
+
+    req = DescribeTaskQueueRequest(
+        namespace=getattr(client, "namespace", "default"),
+        task_queue=TaskQueue(name=task_queue),
+    )
+    try:
+        resp = await service.describe_task_queue(req)
     except Exception:
         return 0
 
