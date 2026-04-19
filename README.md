@@ -1,107 +1,124 @@
-# Swarm v0
+# swarmd
 
-A coordination harness that wraps Claude Code to keep an agent working on a
-clearly specified mission until it is verifiably complete — without the agent
-stopping to ask the user for input, without drifting off task, without gaming
-the success criteria.
+[![CI](https://github.com/npow/swarmd/actions/workflows/ci.yml/badge.svg)](https://github.com/npow/swarmd/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/swarmd)](https://pypi.org/project/swarmd/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Docs](https://img.shields.io/badge/docs-mintlify-18a34a?style=flat-square)](https://mintlify.com/npow/swarmd)
 
-See `docs/superpowers/specs/2026-04-16-swarm-coordination-design.md` for the
-full design and `docs/superpowers/plans/2026-04-16-swarm-v0-plan.md` for the
-v0 scope.
+Keep a Claude agent working on a mission until it actually finishes — across crashes, API outages, and context resets.
 
-## Status
+## The problem
 
-**v0 — minimum viable end-to-end.** Deterministic specialists only
-(`pattern_detector`, `success_verifier`). LLM critics (drift, progress,
-anticheat panel) are the next version's scope.
+You launch a long-running coding task with Claude and come back an hour later to find the session died on an API 424, or the agent declared victory after writing one stub function, or it drifted into cleaning up unrelated code. Plain `claude` has no notion of what "done" means, no recovery from transient failures, and no guard against the agent gaming its own success check. A checkpoint worth hours of reasoning evaporates because one HTTP error wasn't retried.
 
 ## Quick start
 
-Requirements: Python 3.11+, `pip install pydantic pyyaml pytest`, Claude Code
-CLI available on PATH.
+```bash
+# 1. Install
+pip install swarmd
+
+# 2. One-time setup (starts Temporal + worker + registers MCP)
+swarm bootstrap
+
+# 3. Launch a mission
+cat > mission.yaml <<'EOF'
+mission: "Add full test coverage to auth.py"
+workspace: "/abs/path/to/your/project"
+success_criteria:
+  - id: tests_pass
+    check: "pytest auth/ -q"
+    timeout_sec: 120
+  - id: coverage_floor
+    check: "coverage report --include=auth.py --fail-under=90"
+    timeout_sec: 30
+verification:
+  run_every_sec: 30
+  hold_window_sec: 60
+EOF
+
+swarm launch mission.yaml
+# → workflow_id=mission-abc123
+
+swarm status mission-abc123
+```
+
+## Install
 
 ```bash
-# 1. Run the unit tests
-PYTHONPATH=. pytest swarm/tests/ -q
-
-# 2. Launch the example mission (FizzBuzz)
-bash swarm/launch.sh swarm/examples/mission.yaml
+pip install swarmd
 ```
 
-The launcher:
-- Mints a session UUID
-- Copies `mission.yaml` + checks into `~/.swarm/missions/<session>/`
-- Hash-pins every file
-- Starts `pattern_detector`, `success_verifier`, `coordinator` in the background
-- Launches `claude --session-id <uuid>` with the mission prose
+Requires Python 3.10+, a Temporal server on `localhost:7233`, and the `claude` CLI on PATH. `swarm bootstrap` installs Temporal via Homebrew and registers the worker as a launchd service.
 
-Terminate with `Ctrl+C`; the trap kills the specialists.
-
-## Layout
-
-```
-swarm/
-├── launch.sh                 # launcher
-├── settings.json.template    # Claude Code settings with hooks + permission denies
-├── schemas/                  # pydantic models for Event, Finding, Intervention, Mission
-├── lib/                      # paths, hashing, fcntl locking, transcript parser
-├── specialists/              # event_scribe, pattern_detector, success_verifier,
-│                             # coordinator, completion_judge
-├── hooks/                    # SessionStart, PostToolUse, Stop
-├── examples/
-│   ├── mission.yaml
-│   ├── checks/
-│   └── workspace/
-└── tests/
-```
-
-## What v0 gives you
-
-1. **Never stop on the agent's decision.** Stop hook always blocks unless a
-   `mission_complete` intervention is pending.
-2. **Executable mission criteria.** Each `check:` is a shell command run in a
-   clean subprocess (isolated env + pristine working dir).
-3. **Continuous pass hold window.** All criteria must pass for the full
-   `hold_window_sec` to count.
-4. **Loop + oscillation detection** via the deterministic pattern_detector.
-5. **Structural invariants** enforced by the verifier: `no_mock` protected
-   paths and `test_count_floor`.
-6. **Tamper detection** via hash pinning of `mission.yaml` and any referenced
-   check scripts.
-7. **Escape ladder (3 rungs in v0).** On repeated loops, coordinator injects
-   progressively different corrections; after all rungs tried, escalates to
-   `recover` (v1 implements recovery subagent).
-8. **Defense-in-depth permissions.** Settings template denies
-   read/write/grep/glob of `~/.swarm/**`, `.claude/**`, and known-bypass
-   Bash patterns.
-
-## What v0 does NOT yet have (v1+ scope)
-
-- LLM specialists (goal_drift_critic, progress_auditor, anticheat_critic_panel)
-- severity_judge / intervention_judge
-- spawner.py and heavy subagent admission control
-- UID separation (everything runs as `$USER`)
-- Immutable bits and append-only kernel flags
-- supervisor crash-recovery watchdog
-- Non-Anthropic second-opinion auditor
-- Escape ladder rungs 4–10
-
-## Self-bootstrap
-
-v0's first mission (`swarm/examples/mission-v1-upgrade.yaml`, to be written)
-will be: *"produce swarm v1 at `~/.swarm-staging/v1/` that fixes [v0
-defects]."* When that mission is complete and the human approves, run
-`swarm-cli promote v1` (future work) to atomically flip the active version.
-
-## Running the tests
+From source:
 
 ```bash
-# From repo root
-PYTHONPATH=. pytest swarm/tests/ -q
-
-# Individual modules
-PYTHONPATH=. pytest swarm/tests/test_pattern_detector.py -v
+git clone https://github.com/npow/swarmd
+cd swarmd
+pip install -e ".[dev]"
 ```
 
-All tests use `tmp_swarm_root` fixture to isolate state into a tempdir —
-nothing is written to your real `~/.swarm/`.
+## Usage
+
+### Launch, watch, abort
+
+```bash
+swarm launch mission.yaml          # submit; prints workflow_id
+swarm status <workflow_id>         # JSON status: phase, criteria_state, findings_count
+swarm findings <workflow_id> --tail 50
+swarm abort <workflow_id> --reason "criteria were wrong"
+```
+
+### Run the worker daemon manually
+
+```bash
+swarm worker &
+# or configure it as a launchd service via `swarm bootstrap`
+```
+
+### Health check before launching
+
+```bash
+swarm health
+# → Temporal: PASS
+# → Worker:   PASS (1 poller)
+# → Anthropic: PASS
+```
+
+## How it works
+
+Every mission is a Temporal workflow. The workflow runs a verifier loop on a fixed cadence — check tampering, enforce invariants, run all criterion shell commands in parallel, update state. When every criterion passes, the workflow enters a hold window; if they stay green for `hold_window_sec`, a completion judge runs six preconditions before allowing the transition to `complete`. Transient errors (HTTP 424/429/5xx) become retries; terminal errors (400/401/auth) halt the mission with a clear reason.
+
+Three child workflows run alongside the parent:
+- **Pattern detector** tails `events.jsonl`, flags loops, oscillation, and scope-shrinking.
+- **LLM critic** runs cadence-driven progress audits + goal-drift checks, and fans out a six-dimension anti-cheat panel on every criterion pass-transition.
+- **Resource monitor** watches for zombies, memory pressure, disk exhaustion.
+
+Because state lives in Temporal, `kill -9`-ing the worker doesn't kill the mission — the next worker to poll the task queue picks up exactly where the last one left off.
+
+## Configuration
+
+Mission YAML fields: `mission`, `workspace`, `success_criteria`, `verification`, `invariants`, `concurrency`, `observer_config`, `anticheat`, `max_duration_sec`.
+
+See [`examples/`](examples/) for a reference mission. See [`docs/superpowers/specs/2026-04-18-swarm-durability-design.md`](docs/superpowers/specs/2026-04-18-swarm-durability-design.md) for the full design.
+
+## Development
+
+```bash
+git clone https://github.com/npow/swarmd
+cd swarmd
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+pytest tests/ -v
+```
+
+Integration tests against a real Temporal server:
+
+```bash
+pytest tests/test_integration/ --run-integration
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

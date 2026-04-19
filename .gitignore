@@ -1,10 +1,20 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Tooling caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
 
 # Virtual environments
 .venv/
@@ -12,6 +22,7 @@ venv/
 
 # Environment files with secrets
 .env
+.env.local
 
 # IDE
 .vscode/
@@ -19,3 +30,8 @@ venv/
 
 # OS
 .DS_Store
+
+# Project-local state / scratch
+.omc/
+state/
+deep-design-*/
