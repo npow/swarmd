@@ -98,6 +98,10 @@ from swarmd.durable.activities.read_recent_events import (
 # Task 17 — zombie / memory / disk checks for the ResourceMonitorWorkflow.
 # All three live in one module because they're small and always used
 # together; they share the same ``_activity`` alias pattern.
+from swarmd.durable.activities.is_agent_quiescent import (
+    is_agent_quiescent as is_agent_quiescent_activity,
+)
+
 from swarmd.durable.activities.check_resources import (
     check_disk as check_disk_activity,
     check_memory as check_memory_activity,
@@ -134,5 +138,6 @@ __all__ = [
     "run_anticheat_dimension_activity",
     "run_claude_cli_activity",
     "spawn_subagent_activity",
+    "is_agent_quiescent_activity",
     "verify_tamper",
 ]

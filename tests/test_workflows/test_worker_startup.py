@@ -89,11 +89,12 @@ class TestActivityRegistration:
             "check_zombies",
             "check_memory",
             "check_disk",
+            "is_agent_quiescent",
         }
     )
 
-    def test_contains_seventeen_activities(self) -> None:
-        assert len(ACTIVITIES) == 17
+    def test_contains_eighteen_activities(self) -> None:
+        assert len(ACTIVITIES) == 18
 
     def test_all_are_callable(self) -> None:
         for a in ACTIVITIES:

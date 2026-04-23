@@ -47,6 +47,12 @@ class CriterionState(BaseModel):
     streak_sec: float = 0.0
     exit_code: int | None = None
     stderr_tail: str = ""
+    # Debounce counter: how many consecutive check failures have occurred
+    # while the criterion was in a passing state. A single transient failure
+    # (e.g., agent launched a new run that hasn't completed yet) doesn't flip
+    # pass→fail; only `fail_debounce` consecutive failures do. Reset to 0
+    # whenever the check passes.
+    consecutive_fails: int = 0
 
     model_config = {"populate_by_name": True}
 
@@ -87,6 +93,13 @@ class MissionState(BaseModel):
     tried_strategies: list[str] = Field(default_factory=list)
     # Subagent admission-control counters per spec §6.4 row 9.
     spawn_tree: SpawnTree = Field(default_factory=SpawnTree)
+    # Progress monotonicity — detect death spirals where the agent is stuck
+    # or regressing. max_passing is the high-water mark of simultaneously
+    # passing criteria; stall_cycles counts how many verifier cycles have
+    # elapsed without exceeding it. When stall_cycles >= threshold, the
+    # workflow emits a "progress_stalled" finding and can escalate.
+    max_passing: int = 0
+    stall_cycles: int = 0
     # Interventions that were issued but not yet acknowledged. The workflow
     # re-issues them after the ack timeout (120s per spec).
     pending_interventions: list[dict] = Field(default_factory=list)

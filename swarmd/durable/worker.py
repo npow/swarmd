@@ -55,6 +55,7 @@ from swarmd.durable.activities import (
     enforce_invariants,
     goal_drift_check_activity,
     intervention_judge_activity,
+    is_agent_quiescent_activity,
     progress_audit_activity,
     read_recent_events_activity,
     restart_subprocess_activity,
@@ -124,6 +125,8 @@ ACTIVITIES: Final[list] = [
     spawn_subagent_activity,
     restart_subprocess_activity,
     detect_scope_shrinking_activity,
+    # Agent-quiet-period gating.
+    is_agent_quiescent_activity,
     # Observer inputs (Tasks 15, 17).
     read_recent_events_activity,
     check_zombies_activity,

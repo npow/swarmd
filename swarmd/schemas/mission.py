@@ -27,6 +27,22 @@ class SuccessCriterion(BaseModel):
 class Verification(BaseModel):
     run_every_sec: int = 60
     hold_window_sec: int = 120
+    # Debounce: a passing criterion must fail this many consecutive checks
+    # before flipping to fail. Prevents transient blips (e.g., agent launched
+    # a new operation whose intermediate state temporarily breaks a check)
+    # from resetting the hold window. Default 3 = tolerates up to 2 transient
+    # failures (~2 × run_every_sec of instability) before declaring a real
+    # regression.
+    fail_debounce: int = 3
+    # Agent-quiet-period gating: skip criterion checks if any file in the
+    # workspace was modified within the last N seconds. Prevents catching
+    # the agent mid-work in an intermediate state. Tamper + invariant checks
+    # still run every cycle. Set to 0 to disable.
+    quiet_period_sec: int = 15
+    # Progress monotonicity: if the number of simultaneously-passing criteria
+    # hasn't increased in this many verifier cycles, emit a "progress_stalled"
+    # finding. Detects death spirals where the agent is stuck or regressing.
+    stall_threshold: int = 10
     # Extra PATH entries prepended to the verifier's clean PATH. Lets a
     # mission point at e.g. its virtualenv bin, conda env, or local tools
     # without opening the door to arbitrary env inheritance.

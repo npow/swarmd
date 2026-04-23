@@ -202,6 +202,7 @@ class MissionWorkflow:
         if first_launch:
             self._state.phase = "running"
             await self._start_children(mission)
+            await self._spawn_root_agent(mission)
         else:
             # Resumed — re-acquire child handles. No-op today (the handle
             # is a local reference, not an RPC), but kept as a named seam
@@ -311,6 +312,28 @@ class MissionWorkflow:
             )
             self._state.findings_count += 1
 
+        # Step 2.5 — Agent-quiet-period gating. Skip criterion checks if
+        # the agent is actively modifying the workspace. Tamper + invariant
+        # checks (above) still run every cycle — they're read-only and
+        # catch corruption regardless of agent state. Criterion checks are
+        # deferred because they may observe incomplete intermediate state
+        # and oscillate.
+        quiet_sec = mission.verification.quiet_period_sec
+        if quiet_sec > 0:
+            try:
+                quiescent = await workflow.execute_activity(
+                    "is_agent_quiescent",
+                    args=[mission.workspace, quiet_sec],
+                    start_to_close_timeout=timedelta(seconds=10),
+                    retry_policy=retry_policies._policy(
+                        initial_s=1, max_s=2, attempts=1,
+                    ),
+                )
+                if not quiescent:
+                    return  # defer criterion checks; agent is mid-work
+            except Exception:  # noqa: BLE001
+                pass  # activity not registered (tests) or scan failed; proceed
+
         # Step 3 — Criterion checks, fanned out in parallel. ``asyncio.gather``
         # is deterministic inside Temporal's event-loop (spec §5); each
         # activity future is recorded in history in call order.
@@ -329,36 +352,92 @@ class MissionWorkflow:
         now = workflow.now()
         run_every = mission.verification.run_every_sec
 
-        # Update per-criterion state. A flip from passing → failing resets
-        # the streak; a continuing pass adds the verifier cadence to it.
-        # First-ever check initialises the streak at 0 (or run_every if
-        # already passing) consistent with spec §6.2.
+        # Update per-criterion state with debounce. A passing criterion
+        # must fail `fail_debounce` consecutive checks before flipping to
+        # fail — this prevents transient blips (agent's intermediate work
+        # temporarily breaking a check) from resetting the hold window.
+        # A continuing pass extends the streak; a newly-passing criterion
+        # starts its streak clock from this cycle.
         all_pass = True
+        debounce = mission.verification.fail_debounce
         for r in criterion_results:
             cid = _criterion_id_of(r)
-            passing = _pass_of(r)
+            check_passed = _pass_of(r)
             prior = self._state.criteria_state.get(cid)
+
             if prior is None:
-                streak = float(run_every) if passing else 0.0
-            else:
-                if passing and prior.pass_:
+                # First check — no debounce needed.
+                effective_pass = check_passed
+                streak = float(run_every) if check_passed else 0.0
+                consecutive_fails = 0 if check_passed else 1
+            elif check_passed:
+                # Check passed — extend streak, clear fail counter.
+                effective_pass = True
+                consecutive_fails = 0
+                if prior.pass_:
                     streak = prior.streak_sec + float(run_every)
-                elif passing and not prior.pass_:
-                    # Newly-passing — start the streak clock from this cycle.
-                    streak = float(run_every)
                 else:
-                    # Failing — reset the streak regardless of prior value.
+                    streak = float(run_every)
+            else:
+                # Check failed. If previously passing, debounce before
+                # flipping: only flip after N consecutive failures.
+                consecutive_fails = prior.consecutive_fails + 1
+                if prior.pass_ and consecutive_fails < debounce:
+                    # Transient failure — keep the criterion passing,
+                    # preserve the streak, count the blip.
+                    effective_pass = True
+                    streak = prior.streak_sec + float(run_every)
+                else:
+                    # Either was already failing, or debounce threshold
+                    # reached — flip (or stay) to fail.
+                    effective_pass = False
                     streak = 0.0
 
             self._state.criteria_state[cid] = CriterionState(
-                pass_=passing,
+                pass_=effective_pass,
                 last_check_ts=now,
                 streak_sec=streak,
                 exit_code=_exit_code_of(r),
                 stderr_tail=_stderr_tail_of(r),
+                consecutive_fails=consecutive_fails,
             )
-            if not passing:
+            if not effective_pass:
                 all_pass = False
+
+        # Progress monotonicity — detect death spirals. Track the high-water
+        # mark of simultaneously-passing criteria; if it hasn't increased in
+        # ``stall_threshold`` cycles, emit a finding so operators + the
+        # pattern_detector can see it.
+        current_passing = sum(
+            1 for cs in self._state.criteria_state.values() if cs.pass_
+        )
+        if current_passing > self._state.max_passing:
+            self._state.max_passing = current_passing
+            self._state.stall_cycles = 0
+        else:
+            self._state.stall_cycles += 1
+        stall_threshold = mission.verification.stall_threshold
+        if (
+            stall_threshold > 0
+            and self._state.stall_cycles >= stall_threshold
+            and self._state.stall_cycles % stall_threshold == 0
+        ):
+            stall_finding = {
+                "type": "progress_stalled",
+                "verdict": (
+                    f"No progress in {self._state.stall_cycles} verifier cycles. "
+                    f"High-water mark: {self._state.max_passing}/{len(self._state.criteria_state)} criteria. "
+                    f"Current: {current_passing}/{len(self._state.criteria_state)}."
+                ),
+                "severity": "warning",
+            }
+            await workflow.execute_activity(
+                "emit_finding",
+                args=[state_dir, stall_finding],
+                start_to_close_timeout=timedelta(seconds=5),
+                retry_policy=retry_policies.EMIT_FINDING,
+            )
+            self._state.findings_count += 1
 
         # Pass-transition / hold-window / completion-judge decision tree.
         phase = self._state.phase
@@ -489,6 +568,75 @@ class MissionWorkflow:
             "llm_critic": f"{mid}_llm_critic",
             "resource_monitor": f"{mid}_resource_monitor",
         }
+
+    async def _spawn_root_agent(self, mission: Mission) -> None:
+        """Spawn the root claude subagent that actually does the mission's work.
+
+        Fire-and-forget. The subagent is a claude subprocess launched in its
+        own process group; supervision (restarts, zombie-reaping) is handled
+        by ``restart_subprocess`` / ``ResourceMonitorWorkflow``.
+
+        Runs once per mission on first launch — after ``_start_children``
+        has brought up the observers that will watch the agent. Post
+        continue_as_new the existing subprocess keeps running; we don't
+        re-spawn. The agent's session state lives in ``~/.claude/`` keyed
+        by the subagent_id we record here, so restart logic can reattach.
+
+        The prompt is the mission prose + success-criteria preview so the
+        agent has the operational contract in view from turn zero. The
+        workspace is the mission.workspace (the agent runs ``cwd`` there).
+        """
+        criteria_preview = "\n".join(
+            f"- {c.id}: {c.description or c.check}" for c in mission.success_criteria
+        )
+        prompt = (
+            f"{mission.mission}\n\n"
+            f"Your success criteria (shell commands whose exit 0 defines done):\n"
+            f"{criteria_preview}\n\n"
+            f"Workspace: {mission.workspace}. Make whatever files/edits you need."
+        )
+        request = {
+            "parent_id": None,
+            "depth": 0,
+            "prompt": prompt,
+            "workspace": mission.workspace,
+            "mission_id": workflow.info().workflow_id,
+        }
+        # Short timeout + single attempt: `spawn_subagent` is a fire-and-forget
+        # Popen — it's either fast (healthy path) or fails for a reason
+        # (missing CLI, bad workspace) that retrying won't fix. Long waits
+        # would block the workflow from entering the verifier loop and
+        # answering queries.
+        try:
+            result = await workflow.execute_activity(
+                "spawn_subagent",
+                request,
+                start_to_close_timeout=timedelta(seconds=10),
+                retry_policy=retry_policies._policy(initial_s=1, max_s=2, attempts=1),
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Spawn failure is non-fatal: the verifier loop + observers can
+            # still run, and the mission will fail its criteria on its own
+            # terms (no agent → no work → criteria stay red → phase stays
+            # "running"). Operators see the problem via the verifier's
+            # output. This also keeps test harnesses that don't register
+            # ``spawn_subagent`` from crashing — they exercise the
+            # observer + verifier paths, not the spawn.
+            workflow.logger.warning("spawn_root_agent failed: %s", exc)
+            return
+        # Track the spawn so the admission counters and resource monitor
+        # know about the root. ``result`` comes back as a dict through
+        # Temporal's default data converter.
+        try:
+            self._state.spawn_tree.live_count += 1
+            self._state.spawn_tree.per_parent_fan_out["__root__"] = (
+                self._state.spawn_tree.per_parent_fan_out.get("__root__", 0) + 1
+            )
+        except Exception:  # noqa: BLE001
+            # State tracking is best-effort; a shape mismatch must not
+            # kill the mission (the subagent is already spawned).
+            pass
+        _ = result  # quiet linters; the result is recorded via Temporal history
 
     async def _reconnect_children(self) -> None:
         """Re-acquire handles to the three child workflows post continue_as_new.
